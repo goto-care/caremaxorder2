@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* 消耗品発注アプリ - グローバルスタイル */
 
 :root {

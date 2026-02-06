@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function DistributorTemplates() {
+    const router = useRouter();
     const [templates, setTemplates] = useState([
         { id: '1', name: '標準発注書', description: '基本的な発注書テンプレート', facilities: 10, isDefault: true },
         { id: '2', name: '簡易発注書', description: '必須項目のみのシンプルな形式', facilities: 5, isDefault: false },
@@ -14,7 +16,12 @@ export default function DistributorTemplates() {
                     <h1>発注書テンプレート</h1>
                     <p className="text-muted">配下施設に適用する発注書のテンプレートを管理します</p>
                 </div>
-                <button className="btn btn-primary">➕ 新規作成</button>
+                <button
+                    className="btn btn-primary"
+                    onClick={() => router.push('/distributor/templates/builder')}
+                >
+                    ➕ 新規作成
+                </button>
             </div>
 
             <div style={{ display: 'grid', gap: 'var(--spacing-lg)' }}>
@@ -27,7 +34,12 @@ export default function DistributorTemplates() {
                             </div>
                             <div className="flex gap-sm">
                                 {t.isDefault && <span className="badge badge-success">デフォルト</span>}
-                                <button className="btn btn-secondary btn-sm">編集</button>
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => router.push(`/distributor/templates/builder?id=${t.id}`)}
+                                >
+                                    編集
+                                </button>
                             </div>
                         </div>
                         <p>適用施設: {t.facilities}件</p>
