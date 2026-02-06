@@ -27,12 +27,51 @@ export default function OrderPage() {
     // お届け先リスト
     const [deliveryAddresses, setDeliveryAddresses] = useState(['']);
 
+    // カスタム列（動的追加）
+    const [customColumns, setCustomColumns] = useState([]);
+
     // 発注書情報
     const [orderInfo, setOrderInfo] = useState({
         facilityName: 'サンプル病院',
         orderDate: new Date().toISOString().slice(0, 10),
         customFields: []
     });
+
+    // カスタム列追加
+    const addCustomColumn = () => {
+        const colName = prompt('列名を入力してください:', `カスタム${customColumns.length + 1}`);
+        if (colName) {
+            const colId = `col_${Date.now()}`;
+            setCustomColumns([...customColumns, { id: colId, name: colName }]);
+            // 既存の発注アイテムにこの列の値を追加
+            setOrderItems(orderItems.map(item => ({
+                ...item,
+                customValues: { ...item.customValues, [colId]: '' }
+            })));
+        }
+    };
+
+    // カスタム列削除
+    const removeCustomColumn = (colId) => {
+        if (confirm('この列を削除してもよろしいですか？')) {
+            setCustomColumns(customColumns.filter(col => col.id !== colId));
+            // 発注アイテムからもこの列の値を削除
+            setOrderItems(orderItems.map(item => {
+                const newCustomValues = { ...item.customValues };
+                delete newCustomValues[colId];
+                return { ...item, customValues: newCustomValues };
+            }));
+        }
+    };
+
+    // カスタム列の値更新
+    const updateCustomValue = (itemId, colId, value) => {
+        setOrderItems(orderItems.map(item =>
+            item.id === itemId
+                ? { ...item, customValues: { ...item.customValues, [colId]: value } }
+                : item
+        ));
+    };
 
     // 二重発注チェック用
     const [lastOrderTime, setLastOrderTime] = useState(null);
@@ -49,6 +88,11 @@ export default function OrderPage() {
 
     // 行追加
     const addRow = () => {
+        // カスタム列の初期値を設定
+        const customValues = {};
+        customColumns.forEach(col => {
+            customValues[col.id] = '';
+        });
         setOrderItems([...orderItems, {
             id: uuidv4(),
             janCode: '',
@@ -56,7 +100,8 @@ export default function OrderPage() {
             specification: '',
             caseQuantity: 0,
             quantity: 0,
-            remarks: ''
+            remarks: '',
+            customValues
         }]);
     };
 
@@ -292,106 +337,147 @@ export default function OrderPage() {
                 </div>
 
                 {/* 商品テーブル */}
-                <table className="order-table">
-                    <thead>
-                        <tr>
-                            <th style={{ width: '50px' }}>No</th>
-                            <th style={{ width: '140px' }}>JANコード</th>
-                            <th>商品名</th>
-                            <th style={{ width: '120px' }}>規格</th>
-                            <th style={{ width: '80px' }}>入数</th>
-                            <th style={{ width: '80px' }}>数量</th>
-                            <th style={{ width: '150px' }}>備考</th>
-                            <th style={{ width: '60px' }}></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {orderItems.map((item, index) => {
-                            const isDiscontinued = item.salesStatus === '廃盤';
-                            const rowStyle = isDiscontinued ? {
-                                backgroundColor: '#f3f4f6',
-                                opacity: 0.6,
-                                position: 'relative'
-                            } : {};
-
-                            return (
-                                <tr key={item.id} style={rowStyle}>
-                                    <td style={{ textAlign: 'center', background: '#f3f4f6' }}>
-                                        {index + 1}
-                                        {isDiscontinued && (
-                                            <span style={{ display: 'block', fontSize: '0.65rem', color: '#ef4444' }}>廃盤</span>
-                                        )}
-                                    </td>
-                                    <td>
-                                        <input
-                                            type="text"
-                                            value={item.janCode}
-                                            readOnly
-                                            placeholder="選択..."
-                                            onClick={() => !isDiscontinued && openProductModal(item.id)}
-                                            style={{
-                                                cursor: isDiscontinued ? 'not-allowed' : 'pointer',
-                                                background: item.janCode ? (isDiscontinued ? '#e5e7eb' : 'white') : '#fef3c7',
-                                                textDecoration: isDiscontinued ? 'line-through' : 'none'
-                                            }}
-                                        />
-                                    </td>
-                                    <td>
-                                        <input
-                                            type="text"
-                                            value={item.productName}
-                                            readOnly
-                                            placeholder="商品を選択してください"
-                                            onClick={() => !isDiscontinued && openProductModal(item.id)}
-                                            style={{
-                                                cursor: isDiscontinued ? 'not-allowed' : 'pointer',
-                                                textDecoration: isDiscontinued ? 'line-through' : 'none'
-                                            }}
-                                        />
-                                    </td>
-                                    <td><input type="text" value={item.specification} readOnly style={isDiscontinued ? { textDecoration: 'line-through' } : {}} /></td>
-                                    <td style={{ textAlign: 'center' }}>{item.caseQuantity || '-'}</td>
-                                    <td>
-                                        <input
-                                            type="number"
-                                            value={item.quantity || ''}
-                                            onChange={(e) => updateQuantity(item.id, e.target.value)}
-                                            min="0"
-                                            placeholder="0"
-                                            style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                            disabled={isDiscontinued}
-                                        />
-                                    </td>
-                                    <td>
-                                        <input
-                                            type="text"
-                                            value={item.remarks}
-                                            onChange={(e) => updateRemarks(item.id, e.target.value)}
-                                            placeholder="備考"
-                                            disabled={isDiscontinued}
-                                            style={{ background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                        />
-                                    </td>
-                                    <td style={{ textAlign: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--spacing-sm)' }}>
+                    <button onClick={addCustomColumn} className="btn btn-sm btn-secondary">
+                        ➕ 列を追加
+                    </button>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="order-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '50px' }}>No</th>
+                                <th style={{ width: '140px' }}>JANコード</th>
+                                <th>商品名</th>
+                                <th style={{ width: '120px' }}>規格</th>
+                                <th style={{ width: '80px' }}>入数</th>
+                                <th style={{ width: '80px' }}>数量</th>
+                                {customColumns.map(col => (
+                                    <th key={col.id} style={{ width: '100px', position: 'relative' }}>
+                                        {col.name}
                                         <button
-                                            onClick={() => removeRow(item.id)}
+                                            onClick={() => removeCustomColumn(col.id)}
                                             style={{
+                                                position: 'absolute',
+                                                top: '2px',
+                                                right: '2px',
                                                 background: 'none',
                                                 border: 'none',
                                                 color: '#ef4444',
                                                 cursor: 'pointer',
-                                                fontSize: '1.25rem'
+                                                fontSize: '0.7rem',
+                                                padding: '0 4px'
                                             }}
-                                            disabled={orderItems.length === 1}
+                                            title="列を削除"
                                         >
                                             ✕
                                         </button>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                                    </th>
+                                ))}
+                                <th style={{ width: '150px' }}>備考</th>
+                                <th style={{ width: '60px' }}></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {orderItems.map((item, index) => {
+                                const isDiscontinued = item.salesStatus === '廃盤';
+                                const rowStyle = isDiscontinued ? {
+                                    backgroundColor: '#f3f4f6',
+                                    opacity: 0.6,
+                                    position: 'relative'
+                                } : {};
+
+                                return (
+                                    <tr key={item.id} style={rowStyle}>
+                                        <td style={{ textAlign: 'center', background: '#f3f4f6' }}>
+                                            {index + 1}
+                                            {isDiscontinued && (
+                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#ef4444' }}>廃盤</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <input
+                                                type="text"
+                                                value={item.janCode}
+                                                readOnly
+                                                placeholder="選択..."
+                                                onClick={() => !isDiscontinued && openProductModal(item.id)}
+                                                style={{
+                                                    cursor: isDiscontinued ? 'not-allowed' : 'pointer',
+                                                    background: item.janCode ? (isDiscontinued ? '#e5e7eb' : 'white') : '#fef3c7',
+                                                    textDecoration: isDiscontinued ? 'line-through' : 'none'
+                                                }}
+                                            />
+                                        </td>
+                                        <td>
+                                            <input
+                                                type="text"
+                                                value={item.productName}
+                                                readOnly
+                                                placeholder="商品を選択してください"
+                                                onClick={() => !isDiscontinued && openProductModal(item.id)}
+                                                style={{
+                                                    cursor: isDiscontinued ? 'not-allowed' : 'pointer',
+                                                    textDecoration: isDiscontinued ? 'line-through' : 'none'
+                                                }}
+                                            />
+                                        </td>
+                                        <td><input type="text" value={item.specification} readOnly style={isDiscontinued ? { textDecoration: 'line-through' } : {}} /></td>
+                                        <td style={{ textAlign: 'center' }}>{item.caseQuantity || '-'}</td>
+                                        <td>
+                                            <input
+                                                type="number"
+                                                value={item.quantity || ''}
+                                                onChange={(e) => updateQuantity(item.id, e.target.value)}
+                                                min="0"
+                                                placeholder="0"
+                                                style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
+                                                disabled={isDiscontinued}
+                                            />
+                                        </td>
+                                        {customColumns.map(col => (
+                                            <td key={col.id}>
+                                                <input
+                                                    type="text"
+                                                    value={item.customValues?.[col.id] || ''}
+                                                    onChange={(e) => updateCustomValue(item.id, col.id, e.target.value)}
+                                                    placeholder="-"
+                                                    style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
+                                                    disabled={isDiscontinued}
+                                                />
+                                            </td>
+                                        ))}
+                                        <td>
+                                            <input
+                                                type="text"
+                                                value={item.remarks}
+                                                onChange={(e) => updateRemarks(item.id, e.target.value)}
+                                                placeholder="備考"
+                                                disabled={isDiscontinued}
+                                                style={{ background: isDiscontinued ? '#e5e7eb' : 'white' }}
+                                            />
+                                        </td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <button
+                                                onClick={() => removeRow(item.id)}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: '#ef4444',
+                                                    cursor: 'pointer',
+                                                    fontSize: '1.25rem'
+                                                }}
+                                                disabled={orderItems.length === 1}
+                                            >
+                                                ✕
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
 
                 <button onClick={addRow} className="btn btn-secondary" style={{ marginTop: 'var(--spacing-md)' }}>
                     ➕ 行を追加
