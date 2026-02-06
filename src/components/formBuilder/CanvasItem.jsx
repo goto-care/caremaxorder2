@@ -33,6 +33,49 @@ export default function CanvasItem({ item, onDelete, onUpdate, isDragging: isDra
     // アイテムタイプごとのレンダリング
     const renderContent = () => {
         switch (item.type) {
+            case 'logo':
+                return (
+                    <div className="flex items-center gap-4 flex-1">
+                        <div className="text-2xl">🖼️</div>
+                        <div className="flex-1">
+                            {item.imageUrl ? (
+                                <div className="flex items-center gap-3">
+                                    <img
+                                        src={item.imageUrl}
+                                        alt={item.imageName}
+                                        style={{ maxWidth: item.width, maxHeight: item.height }}
+                                        className="rounded-lg border border-slate-600"
+                                    />
+                                    <span className="text-sm text-slate-400">{item.imageName}</span>
+                                </div>
+                            ) : (
+                                <label className="flex items-center gap-2 px-4 py-3 bg-slate-600 border-2 border-dashed border-slate-500 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                                    <span className="text-slate-400">📤 画像をアップロード（JPEG/PNG）</span>
+                                    <input
+                                        type="file"
+                                        accept="image/jpeg,image/png"
+                                        className="hidden"
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file && onUpdate) {
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    onUpdate({
+                                                        imageUrl: ev.target.result,
+                                                        imageName: file.name
+                                                    });
+                                                };
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            )}
+                        </div>
+                    </div>
+                );
+
             case 'product':
                 return (
                     <div className="flex items-center gap-4 flex-1">
@@ -127,6 +170,60 @@ export default function CanvasItem({ item, onDelete, onUpdate, isDragging: isDra
                                 {item.textValue || '注釈を入力...（クリックで編集）'}
                             </div>
                         )}
+                    </div>
+                );
+
+            case 'deliveryColumns':
+                return (
+                    <div className="flex items-center gap-4 flex-1">
+                        <div className="text-2xl">🏢</div>
+                        <div className="flex-1">
+                            <div className="text-sm font-medium text-white mb-2">発注ケース数</div>
+                            <div className="flex flex-wrap gap-2">
+                                {(item.columns || []).map((col, idx) => (
+                                    <div key={col.id || idx} className="flex items-center gap-1">
+                                        <input
+                                            type="text"
+                                            value={col.name}
+                                            className="w-24 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm text-center"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                if (onUpdate) {
+                                                    const newColumns = [...(item.columns || [])];
+                                                    newColumns[idx] = { ...col, name: e.target.value };
+                                                    onUpdate({ columns: newColumns });
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (onUpdate && (item.columns?.length || 0) > 1) {
+                                                    const newColumns = item.columns.filter((_, i) => i !== idx);
+                                                    onUpdate({ columns: newColumns });
+                                                }
+                                            }}
+                                            className="text-red-400 hover:text-red-300 text-sm"
+                                            disabled={(item.columns?.length || 0) <= 1}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (onUpdate) {
+                                            const newColumns = [...(item.columns || []), { id: Date.now().toString(), name: `お届先${String.fromCharCode(65 + (item.columns?.length || 0))}` }];
+                                            onUpdate({ columns: newColumns });
+                                        }
+                                    }}
+                                    className="px-2 py-1 bg-blue-500/20 text-blue-400 text-sm rounded hover:bg-blue-500/30 transition-colors"
+                                >
+                                    + 列追加
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 );
 

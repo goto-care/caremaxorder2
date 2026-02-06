@@ -1,34 +1,55 @@
 'use client';
 import { useState } from 'react';
 import Papa from 'papaparse';
+import { matchesSearch } from '@/utils/kanaUtils';
 
 export default function ProductMaster() {
     const [products, setProducts] = useState([
-        { id: '1', janCode: '4901234567890', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA' },
-        { id: '2', janCode: '4901234567891', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, supplierId: 'S002', supplierName: '仕入先B', makerId: 'M002', makerName: 'メーカーB' },
-        { id: '3', janCode: '4901234567892', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA' },
+        { id: '1', janCode: '4901234567890', webCode: '123456', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
+        { id: '2', janCode: '4901234567891', webCode: '234567', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, supplierId: 'S002', supplierName: '仕入先B', makerId: 'M002', makerName: 'メーカーB', salesStatus: '' },
+        { id: '3', janCode: '4901234567892', webCode: '345678', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '廃盤' },
     ]);
 
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
+
+    // 項目別検索フィルター
+    const [searchFilters, setSearchFilters] = useState({
+        janCode: '',
+        webCode: '',
+        productName: '',
+        makerName: '',
+        salesStatus: ''
+    });
+
     const [formData, setFormData] = useState({
         janCode: '',
+        webCode: '',
         productName: '',
         specification: '',
         caseQuantity: '',
         supplierId: '',
         supplierName: '',
         makerId: '',
-        makerName: ''
+        makerName: '',
+        salesStatus: ''
     });
 
-    // フィルタリング
-    const filteredProducts = products.filter(p =>
-        p.productName.includes(searchTerm) ||
-        p.janCode.includes(searchTerm) ||
-        p.makerName.includes(searchTerm)
-    );
+    // フィルタリング（カナ正規化対応）
+    const filteredProducts = products.filter(p => {
+        if (searchFilters.janCode && !p.janCode.includes(searchFilters.janCode)) return false;
+        if (searchFilters.webCode && !p.webCode?.includes(searchFilters.webCode)) return false;
+        if (searchFilters.productName && !matchesSearch(p.productName, searchFilters.productName)) return false;
+        if (searchFilters.makerName && !matchesSearch(p.makerName, searchFilters.makerName)) return false;
+        if (searchFilters.salesStatus === '廃盤' && p.salesStatus !== '廃盤') return false;
+        if (searchFilters.salesStatus === '販売中' && p.salesStatus === '廃盤') return false;
+        return true;
+    });
+
+    // JANコード重複チェック
+    const checkJanCodeDuplicate = (janCode, currentId = null) => {
+        return products.some(p => p.janCode === janCode && p.id !== currentId);
+    };
 
     // 新規/編集モーダル表示
     const openModal = (product = null) => {
@@ -39,13 +60,15 @@ export default function ProductMaster() {
             setEditingProduct(null);
             setFormData({
                 janCode: '',
+                webCode: '',
                 productName: '',
                 specification: '',
                 caseQuantity: '',
                 supplierId: '',
                 supplierName: '',
                 makerId: '',
-                makerName: ''
+                makerName: '',
+                salesStatus: ''
             });
         }
         setShowModal(true);
@@ -53,6 +76,18 @@ export default function ProductMaster() {
 
     // 保存処理
     const handleSave = () => {
+        // JANコード重複チェック
+        if (checkJanCodeDuplicate(formData.janCode, editingProduct?.id)) {
+            alert('このJANコードは既に登録されています。');
+            return;
+        }
+
+        // WEBコードバリデーション（6桁の数字）
+        if (formData.webCode && !/^\d{6}$/.test(formData.webCode)) {
+            alert('WEBコードは6桁の数字で入力してください。');
+            return;
+        }
+
         if (editingProduct) {
             setProducts(products.map(p => p.id === editingProduct.id ? { ...formData, id: editingProduct.id } : p));
         } else {
@@ -72,13 +107,15 @@ export default function ProductMaster() {
     const handleExport = () => {
         const exportData = products.map(p => ({
             JANコード: p.janCode,
+            WEBコード: p.webCode || '',
             商品名: p.productName,
             規格: p.specification,
             ケース入数: p.caseQuantity,
             仕入先CD: p.supplierId,
             仕入先名: p.supplierName,
             メーカーCD: p.makerId,
-            メーカー名: p.makerName
+            メーカー名: p.makerName,
+            販売状況: p.salesStatus || ''
         }));
 
         const csv = Papa.unparse(exportData, { header: true });
@@ -95,13 +132,15 @@ export default function ProductMaster() {
     const handleDownloadFormat = () => {
         const formatData = [{
             JANコード: '4901234567890',
+            WEBコード: '123456',
             商品名: 'サンプル商品',
             規格: '100ml×10本',
             ケース入数: 10,
             仕入先CD: 'S001',
             仕入先名: '仕入先名',
             メーカーCD: 'M001',
-            メーカー名: 'メーカー名'
+            メーカー名: 'メーカー名',
+            販売状況: ''
         }];
 
         const csv = Papa.unparse(formatData, { header: true });
@@ -123,20 +162,40 @@ export default function ProductMaster() {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                const importedProducts = results.data.map((row, index) => ({
-                    id: String(Date.now() + index),
-                    janCode: row['JANコード'] || row.janCode || '',
-                    productName: row['商品名'] || row.productName || '',
-                    specification: row['規格'] || row.specification || '',
-                    caseQuantity: Number(row['ケース入数'] || row.caseQuantity) || 0,
-                    supplierId: row['仕入先CD'] || row.supplierId || '',
-                    supplierName: row['仕入先名'] || row.supplierName || '',
-                    makerId: row['メーカーCD'] || row.makerId || '',
-                    makerName: row['メーカー名'] || row.makerName || ''
-                }));
+                const importedProducts = [];
+                const duplicateJanCodes = [];
+
+                results.data.forEach((row, index) => {
+                    const janCode = row['JANコード'] || row.janCode || '';
+
+                    // JANコード重複チェック
+                    if (checkJanCodeDuplicate(janCode)) {
+                        duplicateJanCodes.push(janCode);
+                        return;
+                    }
+
+                    importedProducts.push({
+                        id: String(Date.now() + index),
+                        janCode: janCode,
+                        webCode: row['WEBコード'] || row.webCode || '',
+                        productName: row['商品名'] || row.productName || '',
+                        specification: row['規格'] || row.specification || '',
+                        caseQuantity: Number(row['ケース入数'] || row.caseQuantity) || 0,
+                        supplierId: row['仕入先CD'] || row.supplierId || '',
+                        supplierName: row['仕入先名'] || row.supplierName || '',
+                        makerId: row['メーカーCD'] || row.makerId || '',
+                        makerName: row['メーカー名'] || row.makerName || '',
+                        salesStatus: row['販売状況'] || row.salesStatus || ''
+                    });
+                });
 
                 setProducts([...products, ...importedProducts]);
-                alert(`${importedProducts.length}件の商品をインポートしました`);
+
+                let message = `${importedProducts.length}件の商品をインポートしました`;
+                if (duplicateJanCodes.length > 0) {
+                    message += `\n\n以下のJANコードは既に登録済みのためスキップしました:\n${duplicateJanCodes.join('\n')}`;
+                }
+                alert(message);
             },
             error: (error) => {
                 alert('CSVの読み込みに失敗しました: ' + error.message);
@@ -167,14 +226,62 @@ export default function ProductMaster() {
                 </div>
             </div>
 
+            {/* 項目別検索欄 */}
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <input
-                    type="text"
-                    className="form-input"
-                    placeholder="商品名、JANコード、メーカー名で検索..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 'var(--spacing-md)' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>JANコード</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="JANコードで検索"
+                            value={searchFilters.janCode}
+                            onChange={(e) => setSearchFilters({ ...searchFilters, janCode: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>WEBコード</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="WEBコードで検索"
+                            value={searchFilters.webCode}
+                            onChange={(e) => setSearchFilters({ ...searchFilters, webCode: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>商品名</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="商品名で検索（カナ対応）"
+                            value={searchFilters.productName}
+                            onChange={(e) => setSearchFilters({ ...searchFilters, productName: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>メーカー名</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="メーカー名で検索（カナ対応）"
+                            value={searchFilters.makerName}
+                            onChange={(e) => setSearchFilters({ ...searchFilters, makerName: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>販売状況</label>
+                        <select
+                            className="form-input"
+                            value={searchFilters.salesStatus}
+                            onChange={(e) => setSearchFilters({ ...searchFilters, salesStatus: e.target.value })}
+                        >
+                            <option value="">すべて</option>
+                            <option value="販売中">販売中</option>
+                            <option value="廃盤">廃盤</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <div className="card">
@@ -183,6 +290,7 @@ export default function ProductMaster() {
                         <thead>
                             <tr>
                                 <th>JANコード</th>
+                                <th>WEBコード</th>
                                 <th>商品名</th>
                                 <th>規格</th>
                                 <th>ケース入数</th>
@@ -190,13 +298,15 @@ export default function ProductMaster() {
                                 <th>仕入先名</th>
                                 <th>メーカーCD</th>
                                 <th>メーカー名</th>
+                                <th>販売状況</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredProducts.map((product) => (
-                                <tr key={product.id}>
+                                <tr key={product.id} style={product.salesStatus === '廃盤' ? { backgroundColor: 'var(--color-gray-100)', opacity: 0.7 } : {}}>
                                     <td>{product.janCode}</td>
+                                    <td>{product.webCode}</td>
                                     <td>{product.productName}</td>
                                     <td>{product.specification}</td>
                                     <td>{product.caseQuantity}</td>
@@ -204,6 +314,13 @@ export default function ProductMaster() {
                                     <td>{product.supplierName}</td>
                                     <td>{product.makerId}</td>
                                     <td>{product.makerName}</td>
+                                    <td>
+                                        {product.salesStatus === '廃盤' ? (
+                                            <span className="badge badge-danger">廃盤</span>
+                                        ) : (
+                                            <span className="badge badge-success">販売中</span>
+                                        )}
+                                    </td>
                                     <td>
                                         <div className="flex gap-sm">
                                             <button onClick={() => openModal(product)} className="btn btn-sm btn-secondary">編集</button>
@@ -220,7 +337,7 @@ export default function ProductMaster() {
             {/* モーダル */}
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
                         <div className="modal-header">
                             <h2 className="modal-title">{editingProduct ? '商品編集' : '新規商品登録'}</h2>
                             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
@@ -228,7 +345,7 @@ export default function ProductMaster() {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                             <div className="form-group">
-                                <label className="form-label">JANコード</label>
+                                <label className="form-label">JANコード <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                                 <input
                                     type="text"
                                     className="form-input"
@@ -237,7 +354,18 @@ export default function ProductMaster() {
                                 />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">商品名</label>
+                                <label className="form-label">WEBコード（6桁）</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    maxLength={6}
+                                    placeholder="例: 123456"
+                                    value={formData.webCode}
+                                    onChange={(e) => setFormData({ ...formData, webCode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">商品名 <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                                 <input
                                     type="text"
                                     className="form-input"
@@ -298,6 +426,22 @@ export default function ProductMaster() {
                                     value={formData.makerName}
                                     onChange={(e) => setFormData({ ...formData, makerName: e.target.value })}
                                 />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">販売状況</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-sm)' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.salesStatus === '廃盤'}
+                                            onChange={(e) => setFormData({ ...formData, salesStatus: e.target.checked ? '廃盤' : '' })}
+                                        />
+                                        <span>廃盤</span>
+                                    </label>
+                                    {formData.salesStatus === '廃盤' && (
+                                        <span className="badge badge-danger">この商品は発注不可になります</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
 

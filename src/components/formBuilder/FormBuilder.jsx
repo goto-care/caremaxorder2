@@ -103,6 +103,15 @@ export default function FormBuilder({ templateId, onSave }) {
         const id = uuidv4();
 
         switch (type) {
+            case 'logo':
+                return {
+                    type: 'logo',
+                    id,
+                    imageUrl: '',
+                    imageName: '',
+                    width: 200,
+                    height: 80,
+                };
             case 'product':
                 return {
                     type: 'product',
@@ -125,6 +134,15 @@ export default function FormBuilder({ templateId, onSave }) {
                     type: 'note',
                     id,
                     textValue: '',
+                };
+            case 'deliveryColumns':
+                return {
+                    type: 'deliveryColumns',
+                    id,
+                    columns: [
+                        { id: uuidv4(), name: 'お届先A' },
+                        { id: uuidv4(), name: 'お届先B' },
+                    ],
                 };
             default:
                 return null;

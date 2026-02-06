@@ -1,7 +1,25 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 export default function MakerRules() {
+    // 商品マスタからメーカー一覧を取得（実際はFirestoreから取得）
+    const [productMaster] = useState([
+        { id: '1', makerId: 'M001', makerName: 'メーカーA' },
+        { id: '2', makerId: 'M002', makerName: 'メーカーB' },
+        { id: '3', makerId: 'M003', makerName: 'メーカーC' },
+    ]);
+
+    // 商品マスタから重複を除いたメーカー一覧
+    const makerList = useMemo(() => {
+        const uniqueMakers = new Map();
+        productMaster.forEach(p => {
+            if (p.makerId && !uniqueMakers.has(p.makerId)) {
+                uniqueMakers.set(p.makerId, { makerId: p.makerId, makerName: p.makerName });
+            }
+        });
+        return Array.from(uniqueMakers.values());
+    }, [productMaster]);
+
     const [rules, setRules] = useState([
         { id: '1', makerId: 'M001', makerName: 'メーカーA', minimumCases: 5, alertMessage: 'メーカーAの商品は5ケース以上でないと発注できません' },
         { id: '2', makerId: 'M002', makerName: 'メーカーB', minimumCases: 3, alertMessage: 'メーカーBの商品は3ケース以上でないと発注できません' },
@@ -48,18 +66,32 @@ export default function MakerRules() {
         }
     };
 
-    // メーカーCDからアラートメッセージを自動生成
-    const handleMakerChange = (field, value) => {
-        const newFormData = { ...formData, [field]: value };
-
-        if (field === 'minimumCases' || field === 'makerName') {
-            const cases = field === 'minimumCases' ? value : formData.minimumCases;
-            const name = field === 'makerName' ? value : formData.makerName;
-            if (cases && name) {
-                newFormData.alertMessage = `${name}の商品は${cases}ケース以上でないと発注できません`;
+    // メーカー選択時にメーカー名とアラートメッセージを自動設定
+    const handleMakerSelect = (makerId) => {
+        const maker = makerList.find(m => m.makerId === makerId);
+        if (maker) {
+            const newFormData = {
+                ...formData,
+                makerId: maker.makerId,
+                makerName: maker.makerName
+            };
+            // アラートメッセージを自動生成
+            if (formData.minimumCases) {
+                newFormData.alertMessage = `${maker.makerName}の商品は${formData.minimumCases}ケース以上でないと発注できません`;
             }
+            setFormData(newFormData);
         }
+    };
 
+    // 最低ケース数変更時にアラートメッセージを自動生成
+    const handleMinimumCasesChange = (value) => {
+        const newFormData = {
+            ...formData,
+            minimumCases: value
+        };
+        if (formData.makerName && value) {
+            newFormData.alertMessage = `${formData.makerName}の商品は${value}ケース以上でないと発注できません`;
+        }
         setFormData(newFormData);
     };
 
@@ -117,25 +149,20 @@ export default function MakerRules() {
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">メーカーCD</label>
-                            <input
-                                type="text"
+                            <label className="form-label">メーカー選択</label>
+                            <select
                                 className="form-input"
-                                placeholder="例: M001"
                                 value={formData.makerId}
-                                onChange={(e) => handleMakerChange('makerId', e.target.value)}
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">メーカー名</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="例: メーカーA"
-                                value={formData.makerName}
-                                onChange={(e) => handleMakerChange('makerName', e.target.value)}
-                            />
+                                onChange={(e) => handleMakerSelect(e.target.value)}
+                            >
+                                <option value="">メーカーを選択してください</option>
+                                {makerList.map(maker => (
+                                    <option key={maker.makerId} value={maker.makerId}>
+                                        {maker.makerId} - {maker.makerName}
+                                    </option>
+                                ))}
+                            </select>
+                            <small className="text-muted">商品マスタに登録されているメーカーから選択できます</small>
                         </div>
 
                         <div className="form-group">
@@ -146,7 +173,7 @@ export default function MakerRules() {
                                 placeholder="例: 5"
                                 min="1"
                                 value={formData.minimumCases}
-                                onChange={(e) => handleMakerChange('minimumCases', e.target.value)}
+                                onChange={(e) => handleMinimumCasesChange(e.target.value)}
                             />
                         </div>
 
@@ -157,7 +184,7 @@ export default function MakerRules() {
                                 rows="3"
                                 placeholder="発注時に表示されるメッセージ"
                                 value={formData.alertMessage}
-                                onChange={(e) => handleMakerChange('alertMessage', e.target.value)}
+                                onChange={(e) => setFormData({ ...formData, alertMessage: e.target.value })}
                             />
                             <small className="text-muted">最低ケース数を下回った場合に表示されます</small>
                         </div>

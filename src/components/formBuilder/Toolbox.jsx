@@ -3,6 +3,12 @@ import { useDraggable } from '@dnd-kit/core';
 
 const toolItems = [
     {
+        type: 'logo',
+        label: 'ロゴ/画像',
+        icon: '🖼️',
+        description: 'JPEG/PNG画像を配置',
+    },
+    {
         type: 'product',
         label: '商品アイテム',
         icon: '📦',
@@ -19,6 +25,12 @@ const toolItems = [
         label: '注釈テキスト',
         icon: '📝',
         description: '自由な注釈やメモ',
+    },
+    {
+        type: 'deliveryColumns',
+        label: 'お届け先列',
+        icon: '🏢',
+        description: 'お届け先別の数量入力列を追加',
     },
 ];
 

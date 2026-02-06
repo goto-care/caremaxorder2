@@ -5,11 +5,11 @@ import { v4 as uuidv4 } from 'uuid';
 export default function OrderPage() {
     // サンプル商品データ（実際はFirestoreから取得）
     const [productMaster, setProductMaster] = useState([
-        { id: '1', janCode: '4901234567890', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, makerId: 'M001', makerName: 'メーカーA' },
-        { id: '2', janCode: '4901234567891', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, makerId: 'M002', makerName: 'メーカーB' },
-        { id: '3', janCode: '4901234567892', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, makerId: 'M001', makerName: 'メーカーA' },
-        { id: '4', janCode: '4901234567893', productName: 'サンプル商品D', specification: '150g×12個', caseQuantity: 12, makerId: 'M003', makerName: 'メーカーC' },
-        { id: '5', janCode: '4901234567894', productName: 'サンプル商品E', specification: '250ml×8本', caseQuantity: 8, makerId: 'M001', makerName: 'メーカーA' },
+        { id: '1', janCode: '4901234567890', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
+        { id: '2', janCode: '4901234567891', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, makerId: 'M002', makerName: 'メーカーB', salesStatus: '' },
+        { id: '3', janCode: '4901234567892', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, makerId: 'M001', makerName: 'メーカーA', salesStatus: '廃盤' },
+        { id: '4', janCode: '4901234567893', productName: 'サンプル商品D', specification: '150g×12個', caseQuantity: 12, makerId: 'M003', makerName: 'メーカーC', salesStatus: '' },
+        { id: '5', janCode: '4901234567894', productName: 'サンプル商品E', specification: '250ml×8本', caseQuantity: 8, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
     ]);
 
     // メーカールール
@@ -76,6 +76,11 @@ export default function OrderPage() {
 
     // 商品を選択
     const selectProduct = (product) => {
+        // 廃盤商品は選択不可
+        if (product.salesStatus === '廃盤') {
+            alert('この商品は廃盤のため発注できません。');
+            return;
+        }
         setOrderItems(orderItems.map(item =>
             item.id === currentRowId
                 ? {
@@ -84,7 +89,8 @@ export default function OrderPage() {
                     productName: product.productName,
                     specification: product.specification,
                     caseQuantity: product.caseQuantity,
-                    makerId: product.makerId
+                    makerId: product.makerId,
+                    salesStatus: product.salesStatus || ''
                 }
                 : item
         ));
@@ -230,11 +236,13 @@ export default function OrderPage() {
         }
     };
 
-    // 検索フィルタ
+    // 検索フィルタ（廃盤商品は除外）
     const filteredProducts = productMaster.filter(p =>
-        p.productName.includes(searchTerm) ||
-        p.janCode.includes(searchTerm) ||
-        p.makerName.includes(searchTerm)
+        p.salesStatus !== '廃盤' && (
+            p.productName.includes(searchTerm) ||
+            p.janCode.includes(searchTerm) ||
+            p.makerName.includes(searchTerm)
+        )
     );
 
     return (
@@ -298,66 +306,90 @@ export default function OrderPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {orderItems.map((item, index) => (
-                            <tr key={item.id}>
-                                <td style={{ textAlign: 'center', background: '#f3f4f6' }}>{index + 1}</td>
-                                <td>
-                                    <input
-                                        type="text"
-                                        value={item.janCode}
-                                        readOnly
-                                        placeholder="選択..."
-                                        onClick={() => openProductModal(item.id)}
-                                        style={{ cursor: 'pointer', background: item.janCode ? 'white' : '#fef3c7' }}
-                                    />
-                                </td>
-                                <td>
-                                    <input
-                                        type="text"
-                                        value={item.productName}
-                                        readOnly
-                                        placeholder="商品を選択してください"
-                                        onClick={() => openProductModal(item.id)}
-                                        style={{ cursor: 'pointer' }}
-                                    />
-                                </td>
-                                <td><input type="text" value={item.specification} readOnly /></td>
-                                <td style={{ textAlign: 'center' }}>{item.caseQuantity || '-'}</td>
-                                <td>
-                                    <input
-                                        type="number"
-                                        value={item.quantity || ''}
-                                        onChange={(e) => updateQuantity(item.id, e.target.value)}
-                                        min="0"
-                                        placeholder="0"
-                                        style={{ textAlign: 'center' }}
-                                    />
-                                </td>
-                                <td>
-                                    <input
-                                        type="text"
-                                        value={item.remarks}
-                                        onChange={(e) => updateRemarks(item.id, e.target.value)}
-                                        placeholder="備考"
-                                    />
-                                </td>
-                                <td style={{ textAlign: 'center' }}>
-                                    <button
-                                        onClick={() => removeRow(item.id)}
-                                        style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            color: '#ef4444',
-                                            cursor: 'pointer',
-                                            fontSize: '1.25rem'
-                                        }}
-                                        disabled={orderItems.length === 1}
-                                    >
-                                        ✕
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
+                        {orderItems.map((item, index) => {
+                            const isDiscontinued = item.salesStatus === '廃盤';
+                            const rowStyle = isDiscontinued ? {
+                                backgroundColor: '#f3f4f6',
+                                opacity: 0.6,
+                                position: 'relative'
+                            } : {};
+
+                            return (
+                                <tr key={item.id} style={rowStyle}>
+                                    <td style={{ textAlign: 'center', background: '#f3f4f6' }}>
+                                        {index + 1}
+                                        {isDiscontinued && (
+                                            <span style={{ display: 'block', fontSize: '0.65rem', color: '#ef4444' }}>廃盤</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="text"
+                                            value={item.janCode}
+                                            readOnly
+                                            placeholder="選択..."
+                                            onClick={() => !isDiscontinued && openProductModal(item.id)}
+                                            style={{
+                                                cursor: isDiscontinued ? 'not-allowed' : 'pointer',
+                                                background: item.janCode ? (isDiscontinued ? '#e5e7eb' : 'white') : '#fef3c7',
+                                                textDecoration: isDiscontinued ? 'line-through' : 'none'
+                                            }}
+                                        />
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="text"
+                                            value={item.productName}
+                                            readOnly
+                                            placeholder="商品を選択してください"
+                                            onClick={() => !isDiscontinued && openProductModal(item.id)}
+                                            style={{
+                                                cursor: isDiscontinued ? 'not-allowed' : 'pointer',
+                                                textDecoration: isDiscontinued ? 'line-through' : 'none'
+                                            }}
+                                        />
+                                    </td>
+                                    <td><input type="text" value={item.specification} readOnly style={isDiscontinued ? { textDecoration: 'line-through' } : {}} /></td>
+                                    <td style={{ textAlign: 'center' }}>{item.caseQuantity || '-'}</td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            value={item.quantity || ''}
+                                            onChange={(e) => updateQuantity(item.id, e.target.value)}
+                                            min="0"
+                                            placeholder="0"
+                                            style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
+                                            disabled={isDiscontinued}
+                                        />
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="text"
+                                            value={item.remarks}
+                                            onChange={(e) => updateRemarks(item.id, e.target.value)}
+                                            placeholder="備考"
+                                            disabled={isDiscontinued}
+                                            style={{ background: isDiscontinued ? '#e5e7eb' : 'white' }}
+                                        />
+                                    </td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <button
+                                            onClick={() => removeRow(item.id)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#ef4444',
+                                                cursor: 'pointer',
+                                                fontSize: '1.25rem'
+                                            }}
+                                            disabled={orderItems.length === 1}
+                                        >
+                                            ✕
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
 
