@@ -327,7 +327,7 @@ export default function ProductMaster() {
     const labelStyle = {
         fontSize: '0.8rem',
         fontWeight: '600',
-        color: '#374151',
+        color: '#ffffff',
         marginBottom: '4px',
         display: 'block'
     };
@@ -365,7 +365,7 @@ export default function ProductMaster() {
             {/* 項目別検索欄 */}
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)', padding: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>🔍 検索フィルター</span>
+                    <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'white' }}>🔍 検索フィルター</span>
                     <button onClick={clearFilters} className="btn btn-sm btn-secondary" style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
                         クリア
                     </button>
