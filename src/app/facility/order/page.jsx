@@ -1,9 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function OrderPage() {
-    // サンプル商品データ（実際はFirestoreから取得）
+    const { user } = useAuth();
+    // サンプル商品データ
     const [productMaster, setProductMaster] = useState([
         { id: '1', janCode: '4901234567890', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
         { id: '2', janCode: '4901234567891', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, makerId: 'M002', makerName: 'メーカーB', salesStatus: '' },
@@ -240,11 +244,33 @@ export default function OrderPage() {
         setIsSubmitting(true);
 
         try {
-            // モックAPI呼び出し
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            const validItems = orderItems.filter(item => item.janCode && item.quantity > 0);
+
+            // Firestoreに注文を保存
+            const orderData = {
+                facilityName: orderInfo.facilityName,
+                orderDate: orderInfo.orderDate,
+                items: validItems.map(item => ({
+                    janCode: item.janCode,
+                    productName: item.productName,
+                    specification: item.specification,
+                    caseQuantity: item.caseQuantity,
+                    quantity: item.quantity,
+                    remarks: item.remarks,
+                    customValues: item.customValues || {}
+                })),
+                deliveryAddresses: deliveryAddresses.filter(addr => addr.trim() !== ''),
+                totalQuantity: validItems.reduce((sum, i) => sum + (i.quantity || 0), 0),
+                createdAt: serverTimestamp(),
+                userId: user?.uid || 'anonymous',
+                userEmail: user?.email || 'anonymous',
+                status: 'pending' // 初期ステータス
+            };
+
+            await addDoc(collection(db, 'orders'), orderData);
 
             // 成功時の処理
-            const currentContent = JSON.stringify(orderItems.filter(item => item.janCode && item.quantity > 0));
+            const currentContent = JSON.stringify(validItems);
             setLastOrderTime(Date.now());
             setLastOrderContent(currentContent);
 
@@ -255,6 +281,7 @@ export default function OrderPage() {
             setDeliveryAddresses(['']);
 
         } catch (error) {
+            console.error("Order submission error: ", error);
             alert('発注に失敗しました: ' + error.message);
         }
 

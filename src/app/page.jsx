@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth } from "../lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -38,16 +40,19 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
-            const result = await signIn(email, password);
-            if (result.success) {
-                // ユーザーのロールに応じてリダイレクト
-                // 実際の実装では userData からロールを取得
-                router.push('/facility');
-            } else {
-                setError(result.error || 'ログインに失敗しました');
-            }
+            // Firebase SDKを直接使用してログイン
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            console.log("Logged in user:", user);
+
+            // 成功時は /dashboard にリダイレクト
+            router.push('/dashboard');
         } catch (err) {
-            setError('ログイン中にエラーが発生しました');
+            console.error("Login error:", err);
+            // 失敗時は alert で表示
+            window.alert(`ログインに失敗しました: ${err.message}`);
+            setError(err.message || 'ログインに失敗しました');
         }
 
         setLoading(false);

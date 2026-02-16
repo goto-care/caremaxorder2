@@ -5,7 +5,7 @@ import {
     signOut as firebaseSignOut,
     onAuthStateChanged
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 const AuthContext = createContext({});
@@ -39,6 +39,13 @@ export const AuthProvider = ({ children }) => {
     const signIn = async (email, password) => {
         try {
             const result = await signInWithEmailAndPassword(auth, email, password);
+
+            // Firestoreにログイン情報を保存
+            await setDoc(doc(db, 'users', result.user.uid), {
+                lastLogin: serverTimestamp(),
+                email: result.user.email
+            }, { merge: true });
+
             return { success: true, user: result.user };
         } catch (error) {
             return { success: false, error: error.message };
