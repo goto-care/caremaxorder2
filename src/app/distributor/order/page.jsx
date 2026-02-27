@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { getProducts, saveProducts } from '@/utils/storageUtils';
+import { getProducts, saveProducts, getFacilities } from '@/utils/storageUtils';
 
 // 初期サンプル商品（storageに何もない場合のフォールバック）
 const initialProducts = [
@@ -15,18 +15,29 @@ const initialProducts = [
     { id: '5', janCode: '4901234567894', productName: 'サンプル商品E', specification: '250ml×8本', caseQuantity: 8, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
 ];
 
-export default function OrderPage() {
+export default function DistributorOrderPage() {
     const { user } = useAuth();
+
+    // 施設一覧（販売店配下）
+    const [facilityList, setFacilityList] = useState([]);
+    const [selectedFacility, setSelectedFacility] = useState(null);
+
     // 商品マスタ（共有ストレージから読み込み）
     const [productMaster, setProductMaster] = useState([]);
 
     useEffect(() => {
-        const saved = getProducts();
-        if (saved && saved.length > 0) {
-            setProductMaster(saved);
+        // 商品マスタ読み込み
+        const savedProducts = getProducts();
+        if (savedProducts && savedProducts.length > 0) {
+            setProductMaster(savedProducts);
         } else {
             setProductMaster(initialProducts);
             saveProducts(initialProducts);
+        }
+        // 施設一覧読み込み
+        const savedFacilities = getFacilities();
+        if (savedFacilities && savedFacilities.length > 0) {
+            setFacilityList(savedFacilities.filter(f => f.status === 'active'));
         }
     }, []);
 
@@ -48,20 +59,12 @@ export default function OrderPage() {
     // カスタム列（動的追加）
     const [customColumns, setCustomColumns] = useState([]);
 
-    // 発注書情報
-    const [orderInfo, setOrderInfo] = useState({
-        facilityName: 'サンプル病院',
-        orderDate: new Date().toISOString().slice(0, 10),
-        customFields: []
-    });
-
     // カスタム列追加
     const addCustomColumn = () => {
         const colName = prompt('列名を入力してください:', `カスタム${customColumns.length + 1}`);
         if (colName) {
             const colId = `col_${Date.now()}`;
             setCustomColumns([...customColumns, { id: colId, name: colName }]);
-            // 既存の発注アイテムにこの列の値を追加
             setOrderItems(orderItems.map(item => ({
                 ...item,
                 customValues: { ...item.customValues, [colId]: '' }
@@ -73,7 +76,6 @@ export default function OrderPage() {
     const removeCustomColumn = (colId) => {
         if (confirm('この列を削除してもよろしいですか？')) {
             setCustomColumns(customColumns.filter(col => col.id !== colId));
-            // 発注アイテムからもこの列の値を削除
             setOrderItems(orderItems.map(item => {
                 const newCustomValues = { ...item.customValues };
                 delete newCustomValues[colId];
@@ -106,7 +108,6 @@ export default function OrderPage() {
 
     // 行追加
     const addRow = () => {
-        // カスタム列の初期値を設定
         const customValues = {};
         customColumns.forEach(col => {
             customValues[col.id] = '';
@@ -139,7 +140,6 @@ export default function OrderPage() {
 
     // 商品を選択
     const selectProduct = (product) => {
-        // 廃盤商品は選択不可
         if (product.salesStatus === '廃盤') {
             alert('この商品は廃盤のため発注できません。');
             return;
@@ -194,6 +194,13 @@ export default function OrderPage() {
     // バリデーション
     const validateOrder = () => {
         const errors = [];
+
+        // 施設選択チェック
+        if (!selectedFacility) {
+            errors.push('発注先の施設を選択してください');
+            return errors;
+        }
+
         const validItems = orderItems.filter(item => item.janCode && item.quantity > 0);
 
         if (validItems.length === 0) {
@@ -242,7 +249,6 @@ export default function OrderPage() {
 
         setValidationErrors([]);
 
-        // 二重発注チェック
         if (checkDuplicateOrder()) {
             setShowDuplicateWarning(true);
             return;
@@ -262,8 +268,9 @@ export default function OrderPage() {
 
             // Firestoreに注文を保存
             const orderData = {
-                facilityName: orderInfo.facilityName,
-                orderDate: orderInfo.orderDate,
+                facilityName: selectedFacility.name,
+                facilityCode: selectedFacility.facilityCode,
+                orderDate: new Date().toISOString().slice(0, 10),
                 items: validItems.map(item => ({
                     janCode: item.janCode,
                     productName: item.productName,
@@ -278,19 +285,18 @@ export default function OrderPage() {
                 createdAt: serverTimestamp(),
                 userId: user?.uid || 'anonymous',
                 userEmail: user?.email || 'anonymous',
-                status: 'pending' // 初期ステータス
+                orderedBy: 'distributor',
+                status: 'pending'
             };
 
             await addDoc(collection(db, 'orders'), orderData);
 
-            // 成功時の処理
             const currentContent = JSON.stringify(validItems);
             setLastOrderTime(Date.now());
             setLastOrderContent(currentContent);
 
             alert('発注書を保存しました！');
 
-            // フォームをリセット
             setOrderItems([{ id: uuidv4(), janCode: '', productName: '', specification: '', caseQuantity: 0, quantity: 0, remarks: '' }]);
             setDeliveryAddresses(['']);
 
@@ -313,7 +319,6 @@ export default function OrderPage() {
                 savedAt: new Date().toISOString()
             };
 
-            // ローカルストレージに保存（実際はFirestoreに保存）
             const templates = JSON.parse(localStorage.getItem('orderTemplates') || '[]');
             templates.push(template);
             localStorage.setItem('orderTemplates', JSON.stringify(templates));
@@ -327,7 +332,7 @@ export default function OrderPage() {
         p.salesStatus !== '廃盤' && (
             p.productName.includes(searchTerm) ||
             p.janCode.includes(searchTerm) ||
-            p.makerName.includes(searchTerm)
+            (p.makerName && p.makerName.includes(searchTerm))
         )
     );
 
@@ -340,6 +345,45 @@ export default function OrderPage() {
                         ⭐ テンプレート保存
                     </button>
                 </div>
+            </div>
+
+            {/* 施設選択（販売店必須） */}
+            <div className="card" style={{ marginBottom: 'var(--spacing-lg)', padding: 'var(--spacing-lg)' }}>
+                <h3 style={{ marginBottom: 'var(--spacing-md)', color: '#374151' }}>🏥 発注先施設の選択 <span style={{ color: '#ef4444' }}>*必須</span></h3>
+                {facilityList.length === 0 ? (
+                    <div className="alert alert-warning">
+                        <p>施設が登録されていません。先に「施設管理」画面から施設を登録してください。</p>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <select
+                            className="form-input"
+                            style={{ maxWidth: '400px' }}
+                            value={selectedFacility ? selectedFacility.id : ''}
+                            onChange={(e) => {
+                                const facility = facilityList.find(f => f.id === e.target.value);
+                                setSelectedFacility(facility || null);
+                            }}
+                        >
+                            <option value="">-- 施設を選択してください --</option>
+                            {facilityList.map(f => (
+                                <option key={f.id} value={f.id}>
+                                    [{f.facilityCode}] {f.name}
+                                </option>
+                            ))}
+                        </select>
+                        {selectedFacility && (
+                            <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                                <span className="badge badge-primary" style={{ fontSize: '0.9rem', padding: '6px 12px' }}>
+                                    施設CD: {selectedFacility.facilityCode}
+                                </span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                    {selectedFacility.email}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* バリデーションエラー表示 */}
@@ -363,10 +407,10 @@ export default function OrderPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--spacing-lg)' }}>
                         <div>
                             <p style={{ marginBottom: 'var(--spacing-xs)' }}>
-                                <strong>発注日:</strong> {orderInfo.orderDate}
+                                <strong>発注日:</strong> {new Date().toISOString().slice(0, 10)}
                             </p>
                             <p>
-                                <strong>発注元:</strong> {orderInfo.facilityName}
+                                <strong>発注先施設:</strong> {selectedFacility ? `${selectedFacility.name} (${selectedFacility.facilityCode})` : '未選択'}
                             </p>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -646,6 +690,7 @@ export default function OrderPage() {
                             borderRadius: 'var(--radius-md)',
                             margin: 'var(--spacing-md) 0'
                         }}>
+                            <p><strong>施設:</strong> {selectedFacility?.name} ({selectedFacility?.facilityCode})</p>
                             <p><strong>品目数:</strong> {orderItems.filter(i => i.janCode && i.quantity > 0).length}品目</p>
                             <p><strong>総数量:</strong> {orderItems.reduce((sum, i) => sum + (i.quantity || 0), 0)}ケース</p>
                         </div>

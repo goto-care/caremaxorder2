@@ -1,25 +1,7 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 
-export default function MakerRules() {
-    // 商品マスタからメーカー一覧を取得（実際はFirestoreから取得）
-    const [productMaster] = useState([
-        { id: '1', makerId: 'M001', makerName: 'メーカーA' },
-        { id: '2', makerId: 'M002', makerName: 'メーカーB' },
-        { id: '3', makerId: 'M003', makerName: 'メーカーC' },
-    ]);
-
-    // 商品マスタから重複を除いたメーカー一覧
-    const makerList = useMemo(() => {
-        const uniqueMakers = new Map();
-        productMaster.forEach(p => {
-            if (p.makerId && !uniqueMakers.has(p.makerId)) {
-                uniqueMakers.set(p.makerId, { makerId: p.makerId, makerName: p.makerName });
-            }
-        });
-        return Array.from(uniqueMakers.values());
-    }, [productMaster]);
-
+export default function MakerManagement() {
     const [rules, setRules] = useState([
         { id: '1', makerId: 'M001', makerName: 'メーカーA', minimumCases: 5, alertMessage: 'メーカーAの商品は5ケース以上でないと発注できません' },
         { id: '2', makerId: 'M002', makerName: 'メーカーB', minimumCases: 3, alertMessage: 'メーカーBの商品は3ケース以上でないと発注できません' },
@@ -34,6 +16,7 @@ export default function MakerRules() {
         minimumCases: '',
         alertMessage: ''
     });
+    const [openMenuId, setOpenMenuId] = useState(null);
 
     const openModal = (rule = null) => {
         if (rule) {
@@ -52,6 +35,10 @@ export default function MakerRules() {
     };
 
     const handleSave = () => {
+        if (!formData.makerId || !formData.makerName) {
+            alert('メーカーCDとメーカー名は必須です');
+            return;
+        }
         if (editingRule) {
             setRules(rules.map(r => r.id === editingRule.id ? { ...formData, id: editingRule.id } : r));
         } else {
@@ -61,26 +48,10 @@ export default function MakerRules() {
     };
 
     const handleDelete = (id) => {
-        if (confirm('このルールを削除してもよろしいですか？')) {
+        if (confirm('このメーカー情報を削除してもよろしいですか？')) {
             setRules(rules.filter(r => r.id !== id));
         }
-    };
-
-    // メーカー選択時にメーカー名とアラートメッセージを自動設定
-    const handleMakerSelect = (makerId) => {
-        const maker = makerList.find(m => m.makerId === makerId);
-        if (maker) {
-            const newFormData = {
-                ...formData,
-                makerId: maker.makerId,
-                makerName: maker.makerName
-            };
-            // アラートメッセージを自動生成
-            if (formData.minimumCases) {
-                newFormData.alertMessage = `${maker.makerName}の商品は${formData.minimumCases}ケース以上でないと発注できません`;
-            }
-            setFormData(newFormData);
-        }
+        setOpenMenuId(null);
     };
 
     // 最低ケース数変更時にアラートメッセージを自動生成
@@ -95,15 +66,27 @@ export default function MakerRules() {
         setFormData(newFormData);
     };
 
+    // メーカー名変更時にアラートメッセージを自動更新
+    const handleMakerNameChange = (value) => {
+        const newFormData = {
+            ...formData,
+            makerName: value
+        };
+        if (value && formData.minimumCases) {
+            newFormData.alertMessage = `${value}の商品は${formData.minimumCases}ケース以上でないと発注できません`;
+        }
+        setFormData(newFormData);
+    };
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
                 <div>
-                    <h1>メーカールール設定</h1>
-                    <p className="text-muted">メーカーごとの最低発注ケース数を設定します</p>
+                    <h1>メーカー管理</h1>
+                    <p className="text-muted">メーカーの登録・編集と発注ルールを管理します</p>
                 </div>
                 <button onClick={() => openModal()} className="btn btn-primary">
-                    ➕ 新規ルール追加
+                    ➕ 新規メーカー追加
                 </button>
             </div>
 
@@ -129,7 +112,19 @@ export default function MakerRules() {
                                     <td>
                                         <div className="flex gap-sm">
                                             <button onClick={() => openModal(rule)} className="btn btn-sm btn-secondary">編集</button>
-                                            <button onClick={() => handleDelete(rule.id)} className="btn btn-sm btn-danger">削除</button>
+                                            <div className="more-menu">
+                                                <button
+                                                    className="more-menu-trigger"
+                                                    onClick={() => setOpenMenuId(openMenuId === rule.id ? null : rule.id)}
+                                                >
+                                                    ⋯
+                                                </button>
+                                                {openMenuId === rule.id && (
+                                                    <div className="more-menu-dropdown">
+                                                        <button onClick={() => handleDelete(rule.id)}>🗑 削除</button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -144,25 +139,30 @@ export default function MakerRules() {
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2 className="modal-title">{editingRule ? 'ルール編集' : '新規ルール追加'}</h2>
+                            <h2 className="modal-title">{editingRule ? 'メーカー編集' : '新規メーカー追加'}</h2>
                             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">メーカー選択</label>
-                            <select
+                            <label className="form-label">メーカーCD</label>
+                            <input
+                                type="text"
                                 className="form-input"
+                                placeholder="例: M001"
                                 value={formData.makerId}
-                                onChange={(e) => handleMakerSelect(e.target.value)}
-                            >
-                                <option value="">メーカーを選択してください</option>
-                                {makerList.map(maker => (
-                                    <option key={maker.makerId} value={maker.makerId}>
-                                        {maker.makerId} - {maker.makerName}
-                                    </option>
-                                ))}
-                            </select>
-                            <small className="text-muted">商品マスタに登録されているメーカーから選択できます</small>
+                                onChange={(e) => setFormData({ ...formData, makerId: e.target.value })}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">メーカー名</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="例: ○○製薬"
+                                value={formData.makerName}
+                                onChange={(e) => handleMakerNameChange(e.target.value)}
+                            />
                         </div>
 
                         <div className="form-group">

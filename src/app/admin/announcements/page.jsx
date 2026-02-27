@@ -34,6 +34,7 @@ export default function AdminAnnouncements() {
 
     const [showModal, setShowModal] = useState(false);
     const [editingAnnouncement, setEditingAnnouncement] = useState(null);
+    const [openMenuId, setOpenMenuId] = useState(null);
     const [formData, setFormData] = useState({
         title: '',
         content: '',
@@ -109,6 +110,7 @@ export default function AdminAnnouncements() {
         if (confirm('このお知らせを削除してもよろしいですか？')) {
             setAnnouncements(announcements.filter(a => a.id !== id));
         }
+        setOpenMenuId(null);
     };
 
     const handleFileUpload = (e) => {
@@ -177,9 +179,14 @@ export default function AdminAnnouncements() {
                                                     公開
                                                 </button>
                                             )}
-                                            <button onClick={() => handleDelete(announcement.id)} className="btn btn-sm btn-danger">
-                                                削除
-                                            </button>
+                                            <div className="more-menu">
+                                                <button className="more-menu-trigger" onClick={() => setOpenMenuId(openMenuId === announcement.id ? null : announcement.id)}>⋯</button>
+                                                {openMenuId === announcement.id && (
+                                                    <div className="more-menu-dropdown">
+                                                        <button onClick={() => handleDelete(announcement.id)}>🗑 削除</button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>

@@ -21,11 +21,13 @@ export default function OrderSettings() {
     const [remarksCount, setRemarksCount] = useState(2);
 
     const [showAddFieldModal, setShowAddFieldModal] = useState(false);
+    const [showAddCustomColModal, setShowAddCustomColModal] = useState(false);
     const [newField, setNewField] = useState({
         type: 'text',
         label: '',
         position: 'header'
     });
+    const [newCustomCol, setNewCustomCol] = useState('');
 
     // 列の表示切り替え
     const toggleColumn = (id) => {
@@ -59,6 +61,24 @@ export default function OrderSettings() {
         setCustomFields(customFields.filter(f => f.id !== id));
     };
 
+    // カスタム列（テーブル内）追加
+    const addCustomTableColumn = () => {
+        if (!newCustomCol) return;
+        setColumns([
+            ...columns,
+            { id: `custom_${Date.now()}`, name: newCustomCol, required: false, enabled: true, width: 100, isCustom: true }
+        ]);
+        setNewCustomCol('');
+        setShowAddCustomColModal(false);
+    };
+
+    // カスタム列削除
+    const removeCustomTableColumn = (id) => {
+        if (confirm('この列を削除してもよろしいですか？')) {
+            setColumns(columns.filter(col => col.id !== id));
+        }
+    };
+
     // 設定保存
     const handleSave = () => {
         const settings = {
@@ -83,55 +103,85 @@ export default function OrderSettings() {
                 </button>
             </div>
 
-            {/* 列設定 */}
+            {/* インタラクティブプレビュー（列設定） */}
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <div className="card-header">
-                    <h2 className="card-title">📋 表示列の設定</h2>
+                    <h2 className="card-title">👁️ 表示列のレイアウト設定</h2>
+                    <button onClick={() => setShowAddCustomColModal(true)} className="btn btn-secondary btn-sm">
+                        ➕ テーブルに列を追加
+                    </button>
                 </div>
-                <div className="table-container">
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>列名</th>
-                                <th>表示</th>
-                                <th>幅（px）</th>
-                                <th>必須</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {columns.map(col => (
-                                <tr key={col.id}>
-                                    <td><strong>{col.name}</strong></td>
-                                    <td>
-                                        <input
-                                            type="checkbox"
-                                            checked={col.enabled}
-                                            onChange={() => toggleColumn(col.id)}
-                                            disabled={col.required}
-                                        />
-                                    </td>
-                                    <td>
-                                        <input
-                                            type="number"
-                                            className="form-input"
-                                            value={col.width}
-                                            onChange={(e) => updateColumnWidth(col.id, e.target.value)}
-                                            style={{ width: '80px' }}
-                                            min="30"
-                                            max="500"
-                                        />
-                                    </td>
-                                    <td>
-                                        {col.required ? (
-                                            <span className="badge badge-warning">必須</span>
-                                        ) : (
-                                            <span className="text-muted">任意</span>
-                                        )}
-                                    </td>
-                                </tr>
+                <p className="text-muted" style={{ marginBottom: 'var(--spacing-md)' }}>
+                    プレビュー上のヘッダーを直接操作して、項目の表示/非表示や列幅を調整できます。「表示」のチェックを外すと項目が隠れます。
+                </p>
+                <div className="table-container" style={{ overflowX: 'auto', paddingBottom: '20px' }}>
+                    <div className="order-form" style={{ minWidth: '800px', transform: 'scale(0.95)', transformOrigin: 'top left' }}>
+                        <div className="order-form-header">
+                            <h2 className="order-form-title">発 注 書</h2>
+                            {customFields.filter(f => f.position === 'header').map(field => (
+                                <p key={field.id}><strong>{field.label}:</strong> {field.value || '____________'}</p>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                        <table className="order-table" style={{ tableLayout: 'fixed', width: '100%', wordBreak: 'break-word' }}>
+                            <thead>
+                                <tr>
+                                    {columns.filter(c => c.enabled).map(col => {
+                                        // 固定幅の項目
+                                        const isFixed = col.id === 'no' || col.id === 'janCode';
+                                        const fixedWidth = col.id === 'no' ? '45px' : (col.id === 'janCode' ? '130px' : `${col.width}px`);
+
+                                        return (
+                                            <th key={col.id} style={{ width: fixedWidth, minWidth: isFixed ? fixedWidth : '80px', backgroundColor: 'var(--bg-tertiary)', verticalAlign: 'top', padding: '10px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <strong style={{ fontSize: '13px', whiteSpace: 'normal', textAlign: 'center' }}>{col.name}</strong>
+                                                        {col.isCustom && (
+                                                            <button onClick={() => removeCustomTableColumn(col.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}>✕</button>
+                                                        )}
+                                                    </div>
+                                                    {col.required ? (
+                                                        <span className="badge badge-warning" style={{ fontSize: '10px' }}>必須</span>
+                                                    ) : (
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={col.enabled}
+                                                                onChange={() => toggleColumn(col.id)}
+                                                            />
+                                                            表示
+                                                        </label>
+                                                    )}
+                                                    {!isFixed && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <input
+                                                                type="number"
+                                                                className="form-input"
+                                                                value={col.width}
+                                                                onChange={(e) => updateColumnWidth(col.id, e.target.value)}
+                                                                style={{ width: '60px', padding: '2px 4px', fontSize: '12px', textAlign: 'center' }}
+                                                                min="40"
+                                                                max="500"
+                                                            />
+                                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>px</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </th>
+                                        );
+                                    })}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    {columns.filter(c => c.enabled).map(col => (
+                                        <td key={col.id} style={{ textAlign: 'center', wordBreak: 'break-word' }}>
+                                            {col.id === 'no' ? '1' : '...'}
+                                        </td>
+                                    ))}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -220,43 +270,40 @@ export default function OrderSettings() {
                 )}
             </div>
 
-            {/* プレビュー */}
-            <div className="card" style={{ marginTop: 'var(--spacing-lg)' }}>
-                <div className="card-header">
-                    <h2 className="card-title">👁️ プレビュー</h2>
-                </div>
-                <div className="order-form" style={{ transform: 'scale(0.8)', transformOrigin: 'top left', maxHeight: '400px', overflow: 'hidden' }}>
-                    <div className="order-form-header">
-                        <h2 className="order-form-title">発 注 書</h2>
-                        {customFields.filter(f => f.position === 'header').map(field => (
-                            <p key={field.id}><strong>{field.label}:</strong> {field.value || '____________'}</p>
-                        ))}
-                    </div>
-                    <table className="order-table">
-                        <thead>
-                            <tr>
-                                {columns.filter(c => c.enabled).map(col => (
-                                    <th key={col.id} style={{ width: `${col.width}px` }}>{col.name}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                {columns.filter(c => c.enabled).map(col => (
-                                    <td key={col.id}>{col.id === 'no' ? '1' : '...'}</td>
-                                ))}
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
-            {/* フィールド追加モーダル */}
+
+            {/* テーブル列追加モーダル */}
+            {showAddCustomColModal && (
+                <div className="modal-overlay" onClick={() => setShowAddCustomColModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2 className="modal-title">テーブルに列を追加</h2>
+                            <button className="modal-close" onClick={() => setShowAddCustomColModal(false)}>×</button>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">列名</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={newCustomCol}
+                                onChange={(e) => setNewCustomCol(e.target.value)}
+                                placeholder="例: サイズ、カラーなど"
+                            />
+                        </div>
+                        <div className="modal-footer">
+                            <button onClick={() => setShowAddCustomColModal(false)} className="btn btn-secondary">キャンセル</button>
+                            <button onClick={addCustomTableColumn} className="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* カスタムフィールド追加モーダル（ヘッダー・フッター用） */}
             {showAddFieldModal && (
                 <div className="modal-overlay" onClick={() => setShowAddFieldModal(false)}>
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2 className="modal-title">カスタムフィールド追加</h2>
+                            <h2 className="modal-title">詳細項目（ヘッダー/フッター）追加</h2>
                             <button className="modal-close" onClick={() => setShowAddFieldModal(false)}>×</button>
                         </div>
 

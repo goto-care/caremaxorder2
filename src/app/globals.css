@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 消耗品発注アプリ - グローバルスタイル */
+/* 消耗品発注アプリ - グローバルスタイル（ライトテーマ） */
 
 :root {
   /* カラーパレット */
@@ -10,30 +10,30 @@
   --primary-dark: #1d4ed8;
   --primary-light: #3b82f6;
   --secondary: #64748b;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #06b6d4;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #0891b2;
 
-  /* 背景色 */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-hover: #475569;
+  /* 背景色（ライト） */
+  --bg-primary: #f0f4f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8edf2;
+  --bg-hover: #dce3ea;
 
-  /* テキスト */
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
+  /* テキスト（ダーク） */
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
   --text-muted: #94a3b8;
 
   /* ボーダー */
-  --border-color: #334155;
-  --border-light: #475569;
+  --border-color: #cbd5e1;
+  --border-light: #e2e8f0;
 
   /* シャドウ */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
 
   /* スペーシング */
   --spacing-xs: 0.25rem;
@@ -74,26 +74,26 @@ html, body {
 
 .sidebar {
   width: 280px;
-  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
-  border-right: 1px solid var(--border-color);
+  background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+  border-right: none;
   padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
+  color: #fff;
 }
 
 .sidebar-header {
   padding-bottom: var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(255,255,255,0.2);
   margin-bottom: var(--spacing-lg);
 }
 
 .sidebar-logo {
   font-size: 1.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--primary-light), var(--info));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #fff;
+  background: none;
+  -webkit-text-fill-color: unset;
 }
 
 .sidebar-nav {
@@ -106,19 +106,19 @@ html, body {
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.85);
   text-decoration: none;
   transition: all 0.2s ease;
   margin-bottom: var(--spacing-xs);
 }
 
 .nav-item:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
+  background-color: rgba(255,255,255,0.15);
+  color: #fff;
 }
 
 .nav-item.active {
-  background-color: var(--primary);
+  background-color: rgba(255,255,255,0.25);
   color: white;
 }
 
@@ -126,15 +126,16 @@ html, body {
   flex: 1;
   padding: var(--spacing-xl);
   overflow-y: auto;
+  background: var(--bg-primary);
 }
 
 /* カード */
 .card {
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .card-header {
@@ -143,7 +144,7 @@ html, body {
   align-items: center;
   margin-bottom: var(--spacing-lg);
   padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .card-title {
@@ -179,7 +180,7 @@ html, body {
 .btn-secondary {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
@@ -187,12 +188,17 @@ html, body {
 }
 
 .btn-success {
-  background: linear-gradient(135deg, var(--success), #059669);
+  background: linear-gradient(135deg, var(--success), #047857);
+  color: white;
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, var(--warning), #b45309);
   color: white;
 }
 
 .btn-danger {
-  background: linear-gradient(135deg, var(--danger), #dc2626);
+  background: linear-gradient(135deg, var(--danger), #b91c1c);
   color: white;
 }
 
@@ -221,7 +227,7 @@ html, body {
 .form-input {
   width: 100%;
   padding: var(--spacing-md);
-  background: var(--bg-tertiary);
+  background: #fff;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -232,7 +238,7 @@ html, body {
 .form-input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .form-input::placeholder {
@@ -243,7 +249,7 @@ html, body {
 .table-container {
   overflow-x: auto;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-light);
 }
 
 .table {
@@ -255,7 +261,7 @@ html, body {
 .table td {
   padding: var(--spacing-md);
   text-align: left;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .table th {
@@ -268,7 +274,7 @@ html, body {
 }
 
 .table tr:hover {
-  background: var(--bg-tertiary);
+  background: #f8fafc;
 }
 
 .table tr:last-child td {
@@ -281,7 +287,8 @@ html, body {
   color: #1f2937;
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
 }
 
 .order-form-header {
@@ -340,23 +347,40 @@ html, body {
 }
 
 .badge-primary {
-  background: rgba(37, 99, 235, 0.2);
-  color: var(--primary-light);
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--primary);
 }
 
 .badge-success {
-  background: rgba(16, 185, 129, 0.2);
+  background: rgba(5, 150, 105, 0.1);
   color: var(--success);
 }
 
 .badge-warning {
-  background: rgba(245, 158, 11, 0.2);
+  background: rgba(217, 119, 6, 0.1);
   color: var(--warning);
 }
 
 .badge-danger {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(220, 38, 38, 0.1);
   color: var(--danger);
+}
+
+/* Newバッジ（サイドバー用） */
+.badge-new {
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  line-height: 1;
+  animation: pulse-new 2s ease-in-out infinite;
+}
+
+@keyframes pulse-new {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 /* モーダル */
@@ -366,7 +390,7 @@ html, body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -375,7 +399,7 @@ html, body {
 }
 
 .modal {
-  background: var(--bg-secondary);
+  background: #fff;
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   max-width: 500px;
@@ -383,7 +407,7 @@ html, body {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-light);
 }
 
 .modal-header {
@@ -396,6 +420,7 @@ html, body {
 .modal-title {
   font-size: 1.25rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .modal-close {
@@ -412,7 +437,7 @@ html, body {
   gap: var(--spacing-md);
   margin-top: var(--spacing-lg);
   padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-light);
 }
 
 /* アラート */
@@ -426,25 +451,25 @@ html, body {
 }
 
 .alert-warning {
-  background: rgba(245, 158, 11, 0.15);
+  background: rgba(217, 119, 6, 0.08);
   border: 1px solid var(--warning);
   color: var(--warning);
 }
 
 .alert-danger {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(220, 38, 38, 0.08);
   border: 1px solid var(--danger);
   color: var(--danger);
 }
 
 .alert-success {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(5, 150, 105, 0.08);
   border: 1px solid var(--success);
   color: var(--success);
 }
 
 .alert-info {
-  background: rgba(6, 182, 212, 0.15);
+  background: rgba(8, 145, 178, 0.08);
   border: 1px solid var(--info);
   color: var(--info);
 }
@@ -453,7 +478,7 @@ html, body {
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid var(--border-color);
+  border: 3px solid var(--border-light);
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -472,6 +497,60 @@ html, body {
   justify-content: center;
   gap: var(--spacing-md);
   padding: var(--spacing-xl);
+}
+
+/* ⋯ メニュー（削除ボタン格納用） */
+.more-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.more-menu-trigger {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.more-menu-trigger:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.more-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 120px;
+  z-index: 50;
+  padding: 4px 0;
+}
+
+.more-menu-dropdown button {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--danger);
+  transition: background 0.15s;
+}
+
+.more-menu-dropdown button:hover {
+  background: rgba(220, 38, 38, 0.06);
 }
 
 /* ユーティリティ */
@@ -507,13 +586,19 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #0891b2 100%);
 }
 
 .login-card {
   width: 100%;
   max-width: 420px;
   padding: var(--spacing-xl);
+  background: #fff;
+  color: var(--text-primary);
+}
+
+.login-card .form-input {
+  background: #f8fafc;
 }
 
 .login-logo {
@@ -523,10 +608,9 @@ html, body {
 
 .login-logo h1 {
   font-size: 2rem;
-  background: linear-gradient(135deg, var(--primary-light), var(--info));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--primary-dark);
+  background: none;
+  -webkit-text-fill-color: unset;
 }
 
 .login-logo p {

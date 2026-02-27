@@ -6,6 +6,7 @@ import Link from 'next/link';
 export default function DistributorLayout({ children }) {
     const router = useRouter();
     const [user, setUser] = useState(null);
+    const [hasUnread, setHasUnread] = useState(true);
 
     useEffect(() => {
         const demoUser = localStorage.getItem('demoUser');
@@ -40,7 +41,7 @@ export default function DistributorLayout({ children }) {
             <aside className="sidebar">
                 <div className="sidebar-header">
                     <div className="sidebar-logo">販売店画面</div>
-                    <p className="text-muted" style={{ fontSize: '0.875rem' }}>Distributor Portal</p>
+                    <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>Distributor Portal</p>
                 </div>
 
                 <nav className="sidebar-nav">
@@ -53,20 +54,21 @@ export default function DistributorLayout({ children }) {
                     <Link href="/distributor/facilities" className="nav-item">
                         🏥 施設管理
                     </Link>
-                    <Link href="/distributor/templates" className="nav-item">
-                        📝 発注書テンプレート
+                    <Link href="/distributor/order" className="nav-item">
+                        📝 発注書作成
                     </Link>
-                    <Link href="/distributor/announcements" className="nav-item">
+                    <Link href="/distributor/announcements" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         📢 お知らせ
+                        {hasUnread && <span className="badge-new">New</span>}
                     </Link>
                 </nav>
 
-                <div style={{ marginTop: 'auto', paddingTop: 'var(--spacing-lg)', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ marginTop: 'auto', paddingTop: 'var(--spacing-lg)', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
                     <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>ログイン中</p>
-                        <p style={{ fontWeight: '600' }}>{user.name}</p>
+                        <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>ログイン中</p>
+                        <p style={{ fontWeight: '600', color: '#fff' }}>{user.name}</p>
                     </div>
-                    <button onClick={handleLogout} className="btn btn-secondary w-full">
+                    <button onClick={handleLogout} className="btn btn-secondary w-full" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}>
                         ログアウト
                     </button>
                 </div>

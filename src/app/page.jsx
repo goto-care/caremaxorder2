@@ -34,23 +34,43 @@ export default function LoginPage() {
         }
     };
 
+    // 管理者アカウントリスト
+    const ADMIN_EMAILS = ['y.goto@g.caremax.co.jp'];
+
+    const isAdminEmail = (email) => {
+        if (ADMIN_EMAILS.includes(email)) return true;
+        // 動的に登録された管理者もチェック
+        try {
+            const admins = JSON.parse(localStorage.getItem('adminAccounts') || '[]');
+            return admins.some(a => a.email === email);
+        } catch { return false; }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
 
         try {
-            // Firebase SDKを直接使用してログイン
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
             console.log("Logged in user:", user);
 
-            // 成功時は /dashboard にリダイレクト
-            router.push('/dashboard');
+            // メールアドレスでロール判定
+            if (isAdminEmail(email)) {
+                localStorage.setItem('demoUser', JSON.stringify({
+                    uid: user.uid,
+                    email: email,
+                    role: 'admin',
+                    name: '管理者'
+                }));
+                router.push('/admin');
+            } else {
+                router.push('/dashboard');
+            }
         } catch (err) {
             console.error("Login error:", err);
-            // 失敗時は alert で表示
             window.alert(`ログインに失敗しました: ${err.message}`);
             setError(err.message || 'ログインに失敗しました');
         }

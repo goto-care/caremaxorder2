@@ -1,14 +1,17 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { generateFacilityCode, getFacilities, saveFacilities } from '@/utils/storageUtils';
+
+const initialFacilities = [
+    { id: '1', facilityCode: 'FCD-00001', name: 'サンプル病院A', email: 'hospital-a@example.com', createdAt: '2024/01/01', status: 'active', lastOrder: '2024/01/15' },
+    { id: '2', facilityCode: 'FCD-00002', name: '介護施設B', email: 'care-b@example.com', createdAt: '2024/01/05', status: 'active', lastOrder: '2024/01/14' },
+    { id: '3', facilityCode: 'FCD-00003', name: 'クリニックC', email: 'clinic-c@example.com', createdAt: '2024/01/10', status: 'active', lastOrder: '2024/01/13' },
+    { id: '4', facilityCode: 'FCD-00004', name: '診療所D', email: 'clinic-d@example.com', createdAt: '2024/01/12', status: 'inactive', lastOrder: null },
+];
 
 export default function FacilityManagement() {
-    const [facilities, setFacilities] = useState([
-        { id: '1', name: 'サンプル病院A', email: 'hospital-a@example.com', createdAt: '2024/01/01', status: 'active', lastOrder: '2024/01/15' },
-        { id: '2', name: '介護施設B', email: 'care-b@example.com', createdAt: '2024/01/05', status: 'active', lastOrder: '2024/01/14' },
-        { id: '3', name: 'クリニックC', email: 'clinic-c@example.com', createdAt: '2024/01/10', status: 'active', lastOrder: '2024/01/13' },
-        { id: '4', name: '診療所D', email: 'clinic-d@example.com', createdAt: '2024/01/12', status: 'inactive', lastOrder: null },
-    ]);
-
+    const [facilities, setFacilities] = useState([]);
+    const [isLoaded, setIsLoaded] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [editingFacility, setEditingFacility] = useState(null);
     const [formData, setFormData] = useState({
@@ -16,6 +19,26 @@ export default function FacilityManagement() {
         email: '',
         password: ''
     });
+    const [openMenuId, setOpenMenuId] = useState(null);
+
+    // 初期ロード
+    useEffect(() => {
+        const saved = getFacilities();
+        if (saved && saved.length > 0) {
+            setFacilities(saved);
+        } else {
+            setFacilities(initialFacilities);
+            saveFacilities(initialFacilities);
+        }
+        setIsLoaded(true);
+    }, []);
+
+    // 変更を保存
+    useEffect(() => {
+        if (isLoaded && facilities.length > 0) {
+            saveFacilities(facilities);
+        }
+    }, [facilities, isLoaded]);
 
     const openModal = (facility = null) => {
         if (facility) {
@@ -37,6 +60,10 @@ export default function FacilityManagement() {
     };
 
     const handleSave = () => {
+        if (!formData.name || !formData.email) {
+            alert('施設名とメールアドレスは必須です');
+            return;
+        }
         if (editingFacility) {
             setFacilities(facilities.map(f =>
                 f.id === editingFacility.id
@@ -44,17 +71,19 @@ export default function FacilityManagement() {
                     : f
             ));
         } else {
-            setFacilities([
-                ...facilities,
-                {
-                    id: String(Date.now()),
-                    name: formData.name,
-                    email: formData.email,
-                    createdAt: new Date().toLocaleDateString('ja-JP'),
-                    status: 'active',
-                    lastOrder: null
-                }
-            ]);
+            // 新規登録時に施設CDを自動発行
+            const newFacilityCode = generateFacilityCode();
+            const newFacility = {
+                id: String(Date.now()),
+                facilityCode: newFacilityCode,
+                name: formData.name,
+                email: formData.email,
+                createdAt: new Date().toLocaleDateString('ja-JP'),
+                status: 'active',
+                lastOrder: null
+            };
+            setFacilities([...facilities, newFacility]);
+            alert(`施設が登録されました。\n施設CD: ${newFacilityCode}`);
         }
         setShowModal(false);
     };
@@ -116,6 +145,7 @@ export default function FacilityManagement() {
                     <table className="table">
                         <thead>
                             <tr>
+                                <th>施設CD</th>
                                 <th>施設名</th>
                                 <th>メールアドレス</th>
                                 <th>登録日</th>
@@ -127,6 +157,7 @@ export default function FacilityManagement() {
                         <tbody>
                             {facilities.map(facility => (
                                 <tr key={facility.id}>
+                                    <td><code style={{ fontSize: '0.85rem', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{facility.facilityCode}</code></td>
                                     <td><strong>{facility.name}</strong></td>
                                     <td>{facility.email}</td>
                                     <td>{facility.createdAt}</td>
@@ -146,9 +177,14 @@ export default function FacilityManagement() {
                                             <button onClick={() => toggleStatus(facility.id)} className="btn btn-sm btn-warning">
                                                 {facility.status === 'active' ? '停止' : '有効化'}
                                             </button>
-                                            <button onClick={() => handleDelete(facility.id)} className="btn btn-sm btn-danger">
-                                                削除
-                                            </button>
+                                            <div className="more-menu">
+                                                <button className="more-menu-trigger" onClick={() => setOpenMenuId(openMenuId === facility.id ? null : facility.id)}>⋯</button>
+                                                {openMenuId === facility.id && (
+                                                    <div className="more-menu-dropdown">
+                                                        <button onClick={() => { handleDelete(facility.id); setOpenMenuId(null); }}>🗑 削除</button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -166,6 +202,34 @@ export default function FacilityManagement() {
                             <h2 className="modal-title">{editingFacility ? '施設情報編集' : '新規施設登録'}</h2>
                             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
                         </div>
+
+                        {/* ユーザータイプ表示 */}
+                        <div style={{
+                            marginBottom: 'var(--spacing-md)',
+                            padding: '10px',
+                            background: 'rgba(5,150,105,0.08)',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(5,150,105,0.2)'
+                        }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                📋 ユーザータイプ: <strong style={{ color: 'var(--success)' }}>病院・施設</strong>
+                            </p>
+                        </div>
+
+                        {editingFacility && (
+                            <div style={{ marginBottom: 'var(--spacing-md)', padding: '10px', background: 'var(--bg-tertiary)', borderRadius: '6px' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>施設CD: </span>
+                                <strong style={{ fontFamily: 'monospace' }}>{editingFacility.facilityCode}</strong>
+                            </div>
+                        )}
+
+                        {!editingFacility && (
+                            <div style={{ marginBottom: 'var(--spacing-md)', padding: '10px', background: 'rgba(37,99,235,0.06)', borderRadius: '6px', border: '1px solid rgba(37,99,235,0.15)' }}>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                    💡 施設CDは登録時に自動発行されます
+                                </p>
+                            </div>
+                        )}
 
                         <div className="form-group">
                             <label className="form-label">施設名</label>
