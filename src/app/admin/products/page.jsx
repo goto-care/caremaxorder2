@@ -6,9 +6,9 @@ import { generateOriginalCode, getProducts, saveProducts } from '@/utils/storage
 
 // 初期サンプルデータ
 const initialProducts = [
-    { id: '1', originalCode: 'ORG-00001', janCode: '4901234567890', webCode: '123456', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
-    { id: '2', originalCode: 'ORG-00002', janCode: '4901234567891', webCode: '234567', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, supplierId: 'S002', supplierName: '仕入先B', makerId: 'M002', makerName: 'メーカーB', salesStatus: '' },
-    { id: '3', originalCode: 'ORG-00003', janCode: '4901234567892', webCode: '345678', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '廃盤' },
+    { id: '1', originalCode: 'ORG-00001', janCode: '4901234567890', webCode: '123456', productName: 'シリンジ 10ml', specification: '100本/箱', caseQuantity: 10, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '', price: 1500 },
+    { id: '2', originalCode: 'ORG-00002', janCode: '4901234567891', webCode: '234567', productName: 'アルコール綿', specification: '200枚/パック', caseQuantity: 20, supplierId: 'S002', supplierName: '仕入先B', makerId: 'M002', makerName: 'メーカーB', salesStatus: '', price: 800 },
+    { id: '3', originalCode: 'ORG-00003', janCode: '4901234567892', webCode: '345678', productName: 'サージカルマスク', specification: '50枚/箱', caseQuantity: 5, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '', price: 1200 },
 ];
 
 export default function ProductMaster() {
@@ -118,13 +118,14 @@ export default function ProductMaster() {
         }
 
         if (editingProduct) {
-            setProducts(products.map(p => p.id === editingProduct.id ? { ...formData, id: editingProduct.id, originalCode: editingProduct.originalCode } : p));
+            setProducts(products.map(p => p.id === editingProduct.id ? { ...formData, id: editingProduct.id, originalCode: editingProduct.originalCode, price: p.price || 1000 } : p));
         } else {
             // 新規登録時にオリジナルコードを自動生成
             const newProduct = {
                 ...formData,
                 id: String(Date.now()),
-                originalCode: generateOriginalCode()
+                originalCode: generateOriginalCode(),
+                price: 1000 // デフォルト設定
             };
             setProducts([...products, newProduct]);
         }

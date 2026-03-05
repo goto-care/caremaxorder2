@@ -1,678 +1,540 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getProducts, saveProducts } from '@/utils/storageUtils';
 
-// 初期サンプル商品（storageに何もない場合のフォールバック）
+// カスタムフック：クリック外判定
+function useOutsideClick(ref, handler) {
+    useEffect(() => {
+        const listener = (event) => {
+            if (!ref.current || ref.current.contains(event.target)) return;
+            handler(event);
+        };
+        document.addEventListener('mousedown', listener);
+        document.addEventListener('touchstart', listener);
+        return () => {
+            document.removeEventListener('mousedown', listener);
+            document.removeEventListener('touchstart', listener);
+        };
+    }, [ref, handler]);
+}
+
 const initialProducts = [
-    { id: '1', janCode: '4901234567890', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
-    { id: '2', janCode: '4901234567891', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, makerId: 'M002', makerName: 'メーカーB', salesStatus: '' },
-    { id: '3', janCode: '4901234567892', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, makerId: 'M001', makerName: 'メーカーA', salesStatus: '廃盤' },
-    { id: '4', janCode: '4901234567893', productName: 'サンプル商品D', specification: '150g×12個', caseQuantity: 12, makerId: 'M003', makerName: 'メーカーC', salesStatus: '' },
-    { id: '5', janCode: '4901234567894', productName: 'サンプル商品E', specification: '250ml×8本', caseQuantity: 8, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
+    { id: '1', originalCode: 'ORG-00001', janCode: '4901234567890', webCode: '123456', productName: 'シリンジ 10ml', specification: '100本/箱', caseQuantity: 10, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '', price: 1500 },
+    { id: '2', originalCode: 'ORG-00002', janCode: '4901234567891', webCode: '234567', productName: 'アルコール綿', specification: '200枚/パック', caseQuantity: 20, supplierId: 'S002', supplierName: '仕入先B', makerId: 'M002', makerName: 'メーカーB', salesStatus: '', price: 800 },
+    { id: '3', originalCode: 'ORG-00003', janCode: '4901234567892', webCode: '345678', productName: 'サージカルマスク', specification: '50枚/箱', caseQuantity: 5, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '', price: 1200 },
 ];
 
 export default function OrderPage() {
     const { user } = useAuth();
-    // 商品マスタ（共有ストレージから読み込み）
     const [productMaster, setProductMaster] = useState([]);
 
+    // フォーマット情報
+    const [savedFormats, setSavedFormats] = useState([]);
+    const [selectedFormat, setSelectedFormat] = useState(null);
+
+    // フォーム入力値 (カスタムフィールド用)
+    const [formValues, setFormValues] = useState({});
+
+    // 商品明細テーブル用データ
+    const [orderItems, setOrderItems] = useState([
+        { id: uuidv4(), searchKey: '', janCode: '', productName: '', specification: '', price: 0, quantity: 0, remarks: '', isSearching: false }
+    ]);
+
+    // Validation
+    const [errors, setErrors] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // 1. 初期データロード
     useEffect(() => {
-        const saved = getProducts();
-        if (saved && saved.length > 0) {
-            setProductMaster(saved);
+        const savedProds = getProducts();
+        if (savedProds && savedProds.length > 0) {
+            // 単価がない場合は適当に付与
+            const prodsWithPrice = savedProds.map(p => ({ ...p, price: p.price || Math.floor(Math.random() * 5000) + 100 }));
+            setProductMaster(prodsWithPrice);
         } else {
             setProductMaster(initialProducts);
             saveProducts(initialProducts);
         }
+
+        const formatsStr = localStorage.getItem('orderFormats');
+        if (formatsStr) {
+            const formats = JSON.parse(formatsStr);
+            setSavedFormats(formats);
+            if (formats.length > 0) {
+                applyFormat(formats[0]);
+            }
+        }
     }, []);
 
-    // メーカールール
-    const [makerRules, setMakerRules] = useState([
-        { makerId: 'M001', makerName: 'メーカーA', minimumCases: 5, alertMessage: 'メーカーAの商品は5ケース以上でないと発注できません' },
-        { makerId: 'M002', makerName: 'メーカーB', minimumCases: 3, alertMessage: 'メーカーBの商品は3ケース以上でないと発注できません' },
-        { makerId: 'M003', makerName: 'メーカーC', minimumCases: 10, alertMessage: 'メーカーCの商品は10ケース以上でないと発注できません' },
-    ]);
-
-    // 発注書のデータ
-    const [orderItems, setOrderItems] = useState([
-        { id: uuidv4(), janCode: '', productName: '', specification: '', caseQuantity: 0, quantity: 0, remarks: '' }
-    ]);
-
-    // お届け先リスト
-    const [deliveryAddresses, setDeliveryAddresses] = useState(['']);
-
-    // カスタム列（動的追加）
-    const [customColumns, setCustomColumns] = useState([]);
-
-    // 発注書情報
-    const [orderInfo, setOrderInfo] = useState({
-        facilityName: 'サンプル病院',
-        orderDate: new Date().toISOString().slice(0, 10),
-        customFields: []
-    });
-
-    // カスタム列追加
-    const addCustomColumn = () => {
-        const colName = prompt('列名を入力してください:', `カスタム${customColumns.length + 1}`);
-        if (colName) {
-            const colId = `col_${Date.now()}`;
-            setCustomColumns([...customColumns, { id: colId, name: colName }]);
-            // 既存の発注アイテムにこの列の値を追加
-            setOrderItems(orderItems.map(item => ({
-                ...item,
-                customValues: { ...item.customValues, [colId]: '' }
-            })));
-        }
-    };
-
-    // カスタム列削除
-    const removeCustomColumn = (colId) => {
-        if (confirm('この列を削除してもよろしいですか？')) {
-            setCustomColumns(customColumns.filter(col => col.id !== colId));
-            // 発注アイテムからもこの列の値を削除
-            setOrderItems(orderItems.map(item => {
-                const newCustomValues = { ...item.customValues };
-                delete newCustomValues[colId];
-                return { ...item, customValues: newCustomValues };
-            }));
-        }
-    };
-
-    // カスタム列の値更新
-    const updateCustomValue = (itemId, colId, value) => {
-        setOrderItems(orderItems.map(item =>
-            item.id === itemId
-                ? { ...item, customValues: { ...item.customValues, [colId]: value } }
-                : item
-        ));
-    };
-
-    // 二重発注チェック用
-    const [lastOrderTime, setLastOrderTime] = useState(null);
-    const [lastOrderContent, setLastOrderContent] = useState(null);
-
-    // モーダル制御
-    const [showProductModal, setShowProductModal] = useState(false);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-    const [currentRowId, setCurrentRowId] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [validationErrors, setValidationErrors] = useState([]);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // 行追加
-    const addRow = () => {
-        // カスタム列の初期値を設定
-        const customValues = {};
-        customColumns.forEach(col => {
-            customValues[col.id] = '';
+    // 2. フォーマット適用
+    const applyFormat = (format) => {
+        setSelectedFormat(format);
+        // カスタムフィールドの初期化
+        const newFormValues = {};
+        format.fields.forEach(f => {
+            if (f.type !== 'product-table') {
+                newFormValues[f.id] = '';
+            }
         });
-        setOrderItems([...orderItems, {
-            id: uuidv4(),
-            janCode: '',
-            productName: '',
-            specification: '',
-            caseQuantity: 0,
-            quantity: 0,
-            remarks: '',
-            customValues
-        }]);
+        setFormValues(newFormValues);
+        setErrors([]);
     };
 
-    // 行削除
+    const handleFormatChange = (e) => {
+        const formatId = e.target.value;
+        const format = savedFormats.find(f => f.id === formatId);
+        if (format) applyFormat(format);
+    };
+
+    // カスタムフィールド変更
+    const handleFieldChange = (fieldId, value) => {
+        setFormValues(prev => ({ ...prev, [fieldId]: value }));
+    };
+
+    // ------------------------------------
+    // テーブル操作系
+    // ------------------------------------
+    const addRow = () => {
+        setOrderItems([...orderItems, { id: uuidv4(), searchKey: '', janCode: '', productName: '', specification: '', price: 0, quantity: 0, remarks: '', isSearching: false }]);
+    };
+
     const removeRow = (id) => {
         if (orderItems.length > 1) {
             setOrderItems(orderItems.filter(item => item.id !== id));
         }
     };
 
-    // 商品選択モーダルを開く
-    const openProductModal = (rowId) => {
-        setCurrentRowId(rowId);
-        setSearchTerm('');
-        setShowProductModal(true);
+    const updateRow = (id, field, value) => {
+        setOrderItems(orderItems.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
-    // 商品を選択
-    const selectProduct = (product) => {
-        // 廃盤商品は選択不可
+    // インクリメンタルサーチ
+    const handleSearchKeyChange = (id, value) => {
+        updateRow(id, 'searchKey', value);
+        updateRow(id, 'isSearching', true);
+        // 入力変更時は一旦確定済みデータをクリア
+        updateRow(id, 'janCode', '');
+        updateRow(id, 'productName', '');
+        updateRow(id, 'specification', '');
+        updateRow(id, 'price', 0);
+    };
+
+    const selectProduct = (id, product) => {
         if (product.salesStatus === '廃盤') {
             alert('この商品は廃盤のため発注できません。');
             return;
         }
-        setOrderItems(orderItems.map(item =>
-            item.id === currentRowId
-                ? {
-                    ...item,
-                    janCode: product.janCode,
-                    productName: product.productName,
-                    specification: product.specification,
-                    caseQuantity: product.caseQuantity,
-                    makerId: product.makerId,
-                    salesStatus: product.salesStatus || ''
-                }
-                : item
-        ));
-        setShowProductModal(false);
+        setOrderItems(orderItems.map(item => item.id === id ? {
+            ...item,
+            searchKey: `${product.janCode} - ${product.productName}`,
+            janCode: product.janCode,
+            productName: product.productName,
+            specification: product.specification,
+            price: product.price || 0,
+            isSearching: false
+        } : item));
     };
 
-    // 数量変更
-    const updateQuantity = (id, quantity) => {
-        setOrderItems(orderItems.map(item =>
-            item.id === id ? { ...item, quantity: Math.max(0, parseInt(quantity) || 0) } : item
-        ));
-    };
+    // ------------------------------------
+    // 計算ロジック
+    // ------------------------------------
+    const subtotal = orderItems.reduce((sum, item) => sum + (item.price * (parseInt(item.quantity) || 0)), 0);
+    const tax = Math.floor(subtotal * 0.10); // 10%
+    const totalAmount = subtotal + tax;
 
-    // 備考変更
-    const updateRemarks = (id, remarks) => {
-        setOrderItems(orderItems.map(item =>
-            item.id === id ? { ...item, remarks } : item
-        ));
-    };
-
-    // お届け先追加
-    const addDeliveryAddress = () => {
-        setDeliveryAddresses([...deliveryAddresses, '']);
-    };
-
-    // お届け先削除
-    const removeDeliveryAddress = (index) => {
-        if (deliveryAddresses.length > 1) {
-            setDeliveryAddresses(deliveryAddresses.filter((_, i) => i !== index));
-        }
-    };
-
-    // お届け先更新
-    const updateDeliveryAddress = (index, value) => {
-        setDeliveryAddresses(deliveryAddresses.map((addr, i) => i === index ? value : addr));
-    };
-
-    // バリデーション
-    const validateOrder = () => {
-        const errors = [];
-        const validItems = orderItems.filter(item => item.janCode && item.quantity > 0);
-
-        if (validItems.length === 0) {
-            errors.push('1品目以上の商品を入力してください');
-            return errors;
-        }
-
-        // メーカーごとにケース数を集計
-        const makerTotals = {};
-        validItems.forEach(item => {
-            if (!makerTotals[item.makerId]) {
-                makerTotals[item.makerId] = 0;
-            }
-            makerTotals[item.makerId] += item.quantity;
-        });
-
-        // ルールチェック
-        Object.entries(makerTotals).forEach(([makerId, total]) => {
-            const rule = makerRules.find(r => r.makerId === makerId);
-            if (rule && total < rule.minimumCases) {
-                errors.push(rule.alertMessage);
-            }
-        });
-
-        return errors;
-    };
-
-    // 二重発注チェック
-    const checkDuplicateOrder = () => {
-        if (!lastOrderTime || !lastOrderContent) return false;
-
-        const oneHourAgo = Date.now() - (60 * 60 * 1000);
-        if (lastOrderTime < oneHourAgo) return false;
-
-        const currentContent = JSON.stringify(orderItems.filter(item => item.janCode && item.quantity > 0));
-        return currentContent === lastOrderContent;
-    };
-
-    // 発注確定処理
+    // ------------------------------------
+    // 発注確定
+    // ------------------------------------
     const handleSubmit = async () => {
-        const errors = validateOrder();
-        if (errors.length > 0) {
-            setValidationErrors(errors);
+        if (!selectedFormat) return;
+
+        const validationErrors = [];
+        // 1. カスタムフィールドの必須チェック
+        selectedFormat.fields.forEach(f => {
+            if (f.required && f.type !== 'product-table' && !formValues[f.id]) {
+                validationErrors.push(`「${f.label}」は必須入力です。`);
+            }
+        });
+
+        // 2. テーブルの必須チェック
+        const validItems = orderItems.filter(item => item.janCode && item.quantity > 0);
+        if (validItems.length === 0) {
+            validationErrors.push('商品を1つ以上正しく入力し、数量を指定してください。');
+        }
+
+        if (validationErrors.length > 0) {
+            setErrors(validationErrors);
+            window.scrollTo(0, 0);
             return;
         }
 
-        setValidationErrors([]);
-
-        // 二重発注チェック
-        if (checkDuplicateOrder()) {
-            setShowDuplicateWarning(true);
-            return;
-        }
-
-        setShowConfirmModal(true);
-    };
-
-    // 発注実行
-    const confirmOrder = async (force = false) => {
-        setShowConfirmModal(false);
-        setShowDuplicateWarning(false);
+        setErrors([]);
         setIsSubmitting(true);
 
         try {
-            const validItems = orderItems.filter(item => item.janCode && item.quantity > 0);
-
-            // Firestoreに注文を保存
+            // Firestore保存データ構築
             const orderData = {
-                facilityName: orderInfo.facilityName,
-                orderDate: orderInfo.orderDate,
+                formatId: selectedFormat.id,
+                formatName: selectedFormat.name,
+                facilityName: user?.displayName || '病院ユーザー',
+                customValues: formValues, // フォーマットによる自由入力項目
                 items: validItems.map(item => ({
                     janCode: item.janCode,
                     productName: item.productName,
                     specification: item.specification,
-                    caseQuantity: item.caseQuantity,
-                    quantity: item.quantity,
-                    remarks: item.remarks,
-                    customValues: item.customValues || {}
+                    price: item.price,
+                    quantity: parseInt(item.quantity) || 0,
+                    subtotal: item.price * (parseInt(item.quantity) || 0),
+                    remarks: item.remarks
                 })),
-                deliveryAddresses: deliveryAddresses.filter(addr => addr.trim() !== ''),
-                totalQuantity: validItems.reduce((sum, i) => sum + (i.quantity || 0), 0),
+                amount: {
+                    subtotal,
+                    tax,
+                    total: totalAmount
+                },
+                status: 'pending', // 承認待ち
                 createdAt: serverTimestamp(),
-                userId: user?.uid || 'anonymous',
-                userEmail: user?.email || 'anonymous',
-                status: 'pending' // 初期ステータス
+                userId: user?.uid || 'anonymous'
             };
 
             await addDoc(collection(db, 'orders'), orderData);
+            alert('発注を送信しました！');
 
-            // 成功時の処理
-            const currentContent = JSON.stringify(validItems);
-            setLastOrderTime(Date.now());
-            setLastOrderContent(currentContent);
-
-            alert('発注書を保存しました！');
-
-            // フォームをリセット
-            setOrderItems([{ id: uuidv4(), janCode: '', productName: '', specification: '', caseQuantity: 0, quantity: 0, remarks: '' }]);
-            setDeliveryAddresses(['']);
+            // リセット
+            applyFormat(selectedFormat);
+            setOrderItems([{ id: uuidv4(), searchKey: '', janCode: '', productName: '', specification: '', price: 0, quantity: 0, remarks: '', isSearching: false }]);
 
         } catch (error) {
-            console.error("Order submission error: ", error);
-            alert('発注に失敗しました: ' + error.message);
+            console.error('Submit error:', error);
+            if (error.code === 'permission-denied') {
+                alert('Firebase権限エラー: Firestoreのセキュリティルールで書き込みが許可されていないか、プロジェクト設定が未反映です。Firebaseコンソールからルールの確認をお願いします。');
+            } else {
+                alert('発注エラー: ' + error.message);
+            }
         }
-
         setIsSubmitting(false);
     };
 
-    // いつもの注文として保存
-    const saveAsTemplate = () => {
-        const templateName = prompt('テンプレート名を入力してください:');
-        if (templateName) {
-            const template = {
-                name: templateName,
-                items: orderItems.filter(item => item.janCode),
-                deliveryAddresses: deliveryAddresses.filter(addr => addr),
-                savedAt: new Date().toISOString()
-            };
-
-            // ローカルストレージに保存（実際はFirestoreに保存）
-            const templates = JSON.parse(localStorage.getItem('orderTemplates') || '[]');
-            templates.push(template);
-            localStorage.setItem('orderTemplates', JSON.stringify(templates));
-
-            alert('テンプレートを保存しました');
-        }
-    };
-
-    // 検索フィルタ（廃盤商品は除外）
-    const filteredProducts = productMaster.filter(p =>
-        p.salesStatus !== '廃盤' && (
-            p.productName.includes(searchTerm) ||
-            p.janCode.includes(searchTerm) ||
-            p.makerName.includes(searchTerm)
-        )
-    );
+    if (!selectedFormat) {
+        return (
+            <div className="card" style={{ padding: 'var(--spacing-xl)', textAlign: 'center' }}>
+                <p className="text-muted mb-md">利用可能な発注フォーマットがありません。</p>
+                <p>「設定 &gt; 発注書設定」からフォーマットを作成してください。</p>
+            </div>
+        );
+    }
 
     return (
-        <div>
+        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                <h1>発注書作成</h1>
-                <div className="flex gap-sm">
-                    <button onClick={saveAsTemplate} className="btn btn-secondary">
-                        ⭐ テンプレート保存
-                    </button>
-                </div>
+                <h1>発注入力</h1>
+                <select className="form-input" value={selectedFormat?.id || ''} onChange={handleFormatChange} style={{ width: '250px' }}>
+                    {savedFormats.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
             </div>
 
-            {/* バリデーションエラー表示 */}
-            {validationErrors.length > 0 && (
+            {errors.length > 0 && (
                 <div className="alert alert-danger" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                    <div>
-                        <strong>⚠️ 発注できません</strong>
-                        <ul style={{ margin: 'var(--spacing-sm) 0 0 var(--spacing-lg)', padding: 0 }}>
-                            {validationErrors.map((error, index) => (
-                                <li key={index}>{error}</li>
-                            ))}
-                        </ul>
-                    </div>
+                    <strong>⚠️ 以下のエラーがあります</strong>
+                    <ul style={{ margin: '8px 0 0 20px' }}>
+                        {errors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
                 </div>
             )}
 
-            {/* 発注書本体 */}
-            <div className="order-form">
-                <div className="order-form-header">
-                    <h2 className="order-form-title">発 注 書</h2>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--spacing-lg)' }}>
-                        <div>
-                            <p style={{ marginBottom: 'var(--spacing-xs)' }}>
-                                <strong>発注日:</strong> {orderInfo.orderDate}
-                            </p>
-                            <p>
-                                <strong>発注元:</strong> {orderInfo.facilityName}
-                            </p>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <p className="text-muted" style={{ fontSize: '0.875rem' }}>
-                                発注番号: ORD-{Date.now().toString().slice(-8)}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+            <div className="card" style={{ padding: 'var(--spacing-xl)', background: '#fff' }}>
+                <h2 style={{ textAlign: 'center', borderBottom: '2px solid var(--primary)', paddingBottom: '10px', marginBottom: '30px' }}>
+                    {selectedFormat.name}
+                </h2>
 
-                {/* 商品テーブル */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--spacing-sm)' }}>
-                    <button onClick={addCustomColumn} className="btn btn-sm btn-secondary">
-                        ➕ 列を追加
-                    </button>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table className="order-table">
-                        <thead>
-                            <tr>
-                                <th style={{ width: '50px' }}>No</th>
-                                <th style={{ width: '140px' }}>JANコード</th>
-                                <th>商品名</th>
-                                <th style={{ width: '120px' }}>規格</th>
-                                <th style={{ width: '80px' }}>入数</th>
-                                <th style={{ width: '80px' }}>数量</th>
-                                {customColumns.map(col => (
-                                    <th key={col.id} style={{ width: '100px', position: 'relative' }}>
-                                        {col.name}
-                                        <button
-                                            onClick={() => removeCustomColumn(col.id)}
-                                            style={{
-                                                position: 'absolute',
-                                                top: '2px',
-                                                right: '2px',
-                                                background: 'none',
-                                                border: 'none',
-                                                color: '#ef4444',
-                                                cursor: 'pointer',
-                                                fontSize: '0.7rem',
-                                                padding: '0 4px'
-                                            }}
-                                            title="列を削除"
-                                        >
-                                            ✕
-                                        </button>
-                                    </th>
-                                ))}
-                                <th style={{ width: '150px' }}>備考</th>
-                                <th style={{ width: '60px' }}></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {orderItems.map((item, index) => {
-                                const isDiscontinued = item.salesStatus === '廃盤';
-                                const rowStyle = isDiscontinued ? {
-                                    backgroundColor: '#f3f4f6',
-                                    opacity: 0.6,
-                                    position: 'relative'
-                                } : {};
+                <div className="dynamic-form-grid">
+                    {selectedFormat.fields.map(field => {
+                        // ==== 商品明細テーブル ====
+                        if (field.type === 'product-table') {
+                            return (
+                                <div key={field.id} className="form-section field-block-wrapper" style={{ gridRow: field.row || 'auto', gridColumn: field.col ? `${field.col} / span 4` : 'span 4' }}>
+                                    <h3 style={{ fontSize: '1.1rem', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        📦 商品明細 <span className="req-badge">必須</span>
+                                    </h3>
+                                    <div style={{ overflowX: 'auto', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
+                                        <table className="order-table" style={{ margin: 0 }}>
+                                            <thead style={{ background: '#f8fafc' }}>
+                                                <tr>
+                                                    <th style={{ width: '40px', textAlign: 'center' }}>No</th>
+                                                    <th style={{ width: '300px' }}>JANコード / 商品名検索 <span className="req">*</span></th>
+                                                    <th style={{ width: '120px' }}>規格</th>
+                                                    <th style={{ width: '100px', textAlign: 'right' }}>単価(円)</th>
+                                                    <th style={{ width: '80px' }}>数量 <span className="req">*</span></th>
+                                                    <th style={{ width: '100px', textAlign: 'right' }}>小計(円)</th>
+                                                    <th>備考</th>
+                                                    <th style={{ width: '50px', textAlign: 'center' }}></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {orderItems.map((item, index) => (
+                                                    <tr key={item.id}>
+                                                        <td style={{ textAlign: 'center', background: '#f8fafc', fontWeight: 'bold' }}>{index + 1}</td>
+                                                        <td style={{ position: 'relative', overflow: 'visible' }}>
+                                                            {/* インクリメンタルサーチセル */}
+                                                            <SearchCell
+                                                                item={item}
+                                                                productMaster={productMaster}
+                                                                onSearchChange={(val) => handleSearchKeyChange(item.id, val)}
+                                                                onSelect={(prod) => selectProduct(item.id, prod)}
+                                                                onBlur={() => updateRow(item.id, 'isSearching', false)}
+                                                                onFocus={() => updateRow(item.id, 'isSearching', true)}
+                                                            />
+                                                        </td>
+                                                        <td style={{ background: '#f1f5f9', color: '#64748b' }}>{item.specification}</td>
+                                                        <td style={{ background: '#f1f5f9', color: '#64748b', textAlign: 'right' }}>
+                                                            {item.price > 0 ? item.price.toLocaleString() : ''}
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                className="form-input"
+                                                                value={item.quantity === 0 ? '' : item.quantity}
+                                                                onChange={(e) => updateRow(item.id, 'quantity', e.target.value)}
+                                                                style={{ padding: '6px', textAlign: 'right', border: item.janCode && !item.quantity ? '1px solid var(--danger)' : '' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ background: '#f1f5f9', fontWeight: 'bold', textAlign: 'right' }}>
+                                                            {(item.price * (parseInt(item.quantity) || 0)).toLocaleString()}
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                className="form-input"
+                                                                value={item.remarks}
+                                                                onChange={(e) => updateRow(item.id, 'remarks', e.target.value)}
+                                                                style={{ padding: '6px' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            <button
+                                                                onClick={() => removeRow(item.id)}
+                                                                className="btn btn-secondary"
+                                                                style={{ padding: '4px 8px', color: 'var(--danger)', background: 'transparent', border: 'none' }}
+                                                            >✕</button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div style={{ marginTop: '10px' }}>
+                                        <button onClick={addRow} className="btn btn-secondary" style={{ fontSize: '0.85rem' }}>+ 行を追加</button>
+                                    </div>
 
-                                return (
-                                    <tr key={item.id} style={rowStyle}>
-                                        <td style={{ textAlign: 'center', background: '#f3f4f6' }}>
-                                            {index + 1}
-                                            {isDiscontinued && (
-                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#ef4444' }}>廃盤</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <input
-                                                type="text"
-                                                value={item.janCode}
-                                                readOnly
-                                                placeholder="選択..."
-                                                onClick={() => !isDiscontinued && openProductModal(item.id)}
-                                                style={{
-                                                    cursor: isDiscontinued ? 'not-allowed' : 'pointer',
-                                                    background: item.janCode ? (isDiscontinued ? '#e5e7eb' : 'white') : '#fef3c7',
-                                                    textDecoration: isDiscontinued ? 'line-through' : 'none'
-                                                }}
-                                            />
-                                        </td>
-                                        <td>
-                                            <input
-                                                type="text"
-                                                value={item.productName}
-                                                readOnly
-                                                placeholder="商品を選択してください"
-                                                onClick={() => !isDiscontinued && openProductModal(item.id)}
-                                                style={{
-                                                    cursor: isDiscontinued ? 'not-allowed' : 'pointer',
-                                                    textDecoration: isDiscontinued ? 'line-through' : 'none'
-                                                }}
-                                            />
-                                        </td>
-                                        <td><input type="text" value={item.specification} readOnly style={isDiscontinued ? { textDecoration: 'line-through' } : {}} /></td>
-                                        <td style={{ textAlign: 'center' }}>{item.caseQuantity || '-'}</td>
-                                        <td>
-                                            <input
-                                                type="number"
-                                                value={item.quantity || ''}
-                                                onChange={(e) => updateQuantity(item.id, e.target.value)}
-                                                min="0"
-                                                placeholder="0"
-                                                style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                                disabled={isDiscontinued}
-                                            />
-                                        </td>
-                                        {customColumns.map(col => (
-                                            <td key={col.id}>
-                                                <input
-                                                    type="text"
-                                                    value={item.customValues?.[col.id] || ''}
-                                                    onChange={(e) => updateCustomValue(item.id, col.id, e.target.value)}
-                                                    placeholder="-"
-                                                    style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                                    disabled={isDiscontinued}
-                                                />
-                                            </td>
+                                    {/* 自動計算サマリー */}
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                                        <div style={{ width: '300px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <span className="text-muted">小計</span>
+                                                <span>¥{subtotal.toLocaleString()}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <span className="text-muted">消費税 (10%)</span>
+                                                <span>¥{tax.toLocaleString()}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--primary-dark)' }}>
+                                                <span>合計金額</span>
+                                                <span>¥{totalAmount.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        // ==== スペーサー ====
+                        if (field.type === 'spacer') {
+                            const sColSpan = field.colSpan || 1;
+                            const sGridStyle = {
+                                gridRow: field.row || 'auto',
+                                gridColumn: field.col ? `${field.col} / span ${sColSpan}` : `span ${sColSpan}`,
+                                minHeight: '1px'
+                            };
+                            return <div key={field.id} style={sGridStyle}></div>;
+                        }
+
+                        // ==== 標準フィールド群 ====
+                        const isError = field.required && !formValues[field.id] && errors.length > 0;
+                        const colSpan = field.colSpan || 4;
+                        const gridStyle = {
+                            gridRow: field.row || 'auto',
+                            gridColumn: field.col ? `${field.col} / span ${colSpan}` : `span ${colSpan}`
+                        };
+                        const isTextInput = ['text', 'company', 'address', 'phone', 'fax'].includes(field.type);
+
+                        return (
+                            <div key={field.id} className="form-group" style={{ ...gridStyle, background: '#fafafa', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontWeight: 'bold', marginBottom: '8px' }}>
+                                    {field.label}
+                                    {field.required && <span className="req-badge">必須</span>}
+                                </label>
+
+                                {isTextInput && (
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder={field.placeholder}
+                                        value={formValues[field.id] || ''}
+                                        onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                                        style={isError ? { borderColor: 'var(--danger)', background: '#fef2f2' } : {}}
+                                    />
+                                )}
+                                {field.type === 'textarea' && (
+                                    <textarea
+                                        className="form-input"
+                                        placeholder={field.placeholder}
+                                        rows="3"
+                                        value={formValues[field.id] || ''}
+                                        onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                                        style={isError ? { borderColor: 'var(--danger)', background: '#fef2f2' } : {}}
+                                    />
+                                )}
+                                {field.type === 'date' && (
+                                    <input
+                                        type="date"
+                                        className="form-input"
+                                        value={formValues[field.id] || ''}
+                                        onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                                        style={isError ? { borderColor: 'var(--danger)', background: '#fef2f2' } : {}}
+                                    />
+                                )}
+                                {field.type === 'select' && (
+                                    <select
+                                        className="form-input"
+                                        value={formValues[field.id] || ''}
+                                        onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                                        style={isError ? { borderColor: 'var(--danger)', background: '#fef2f2' } : {}}
+                                    >
+                                        <option value="">選択してください</option>
+                                        {field.options?.map((opt, i) => (
+                                            <option key={i} value={opt}>{opt}</option>
                                         ))}
-                                        <td>
-                                            <input
-                                                type="text"
-                                                value={item.remarks}
-                                                onChange={(e) => updateRemarks(item.id, e.target.value)}
-                                                placeholder="備考"
-                                                disabled={isDiscontinued}
-                                                style={{ background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                            />
-                                        </td>
-                                        <td style={{ textAlign: 'center' }}>
-                                            <button
-                                                onClick={() => removeRow(item.id)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: '#ef4444',
-                                                    cursor: 'pointer',
-                                                    fontSize: '1.25rem'
-                                                }}
-                                                disabled={orderItems.length === 1}
-                                            >
-                                                ✕
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                    </select>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
 
-                <button onClick={addRow} className="btn btn-secondary" style={{ marginTop: 'var(--spacing-md)' }}>
-                    ➕ 行を追加
-                </button>
-
-                {/* お届け先 */}
-                <div style={{ marginTop: 'var(--spacing-xl)', paddingTop: 'var(--spacing-lg)', borderTop: '2px solid #e5e7eb' }}>
-                    <h3 style={{ marginBottom: 'var(--spacing-md)', color: '#374151' }}>お届け先</h3>
-                    {deliveryAddresses.map((address, index) => (
-                        <div key={index} style={{ display: 'flex', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-sm)' }}>
-                            <span style={{ minWidth: '30px', color: '#6b7280' }}>{index + 1}.</span>
-                            <input
-                                type="text"
-                                value={address}
-                                onChange={(e) => updateDeliveryAddress(index, e.target.value)}
-                                placeholder="住所を入力..."
-                                style={{
-                                    flex: 1,
-                                    padding: 'var(--spacing-sm)',
-                                    border: '1px solid #d1d5db',
-                                    borderRadius: 'var(--radius-sm)'
-                                }}
-                            />
-                            <button
-                                onClick={() => removeDeliveryAddress(index)}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#ef4444',
-                                    cursor: 'pointer'
-                                }}
-                                disabled={deliveryAddresses.length === 1}
-                            >
-                                ✕
-                            </button>
-                        </div>
-                    ))}
-                    <button onClick={addDeliveryAddress} className="btn btn-sm btn-secondary" style={{ marginTop: 'var(--spacing-sm)' }}>
-                        ➕ お届け先を追加
+                <div style={{ marginTop: '40px', textAlign: 'center' }}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        style={{ padding: '12px 40px', fontSize: '1.1rem', boxShadow: '0 4px 6px rgba(13, 148, 136, 0.2)' }}
+                    >
+                        {isSubmitting ? '送信中...' : '発注を確定する'}
                     </button>
+                    <p className="text-muted mt-sm" style={{ fontSize: '0.85rem' }}>※発注データはシステムを通じて販売店へ共有されます</p>
                 </div>
             </div>
+        </div>
+    );
+}
 
-            {/* 発注ボタン */}
-            <div style={{
-                marginTop: 'var(--spacing-xl)',
-                display: 'flex',
-                justifyContent: 'center',
-                gap: 'var(--spacing-md)'
-            }}>
-                <button
-                    onClick={handleSubmit}
-                    className="btn btn-success btn-lg"
-                    disabled={isSubmitting}
-                    style={{ minWidth: '200px' }}
-                >
-                    {isSubmitting ? '保存中...' : '💾 発注書を保存する'}
-                </button>
-            </div>
+// ==== インクリメンタルサーチ用カスタムセルコンポーネント ====
+function SearchCell({ item, productMaster, onSearchChange, onSelect, onFocus, onBlur }) {
+    const wrapperRef = useRef(null);
+    const [localValue, setLocalValue] = useState(item.searchKey);
 
-            {/* 商品選択モーダル */}
-            {showProductModal && (
-                <div className="modal-overlay" onClick={() => setShowProductModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
-                        <div className="modal-header">
-                            <h2 className="modal-title">商品を選択</h2>
-                            <button className="modal-close" onClick={() => setShowProductModal(false)}>×</button>
-                        </div>
+    useEffect(() => {
+        setLocalValue(item.searchKey);
+    }, [item.searchKey]);
 
-                        <input
-                            type="text"
-                            className="form-input"
-                            placeholder="商品名、JANコード、メーカー名で検索..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{ marginBottom: 'var(--spacing-md)' }}
-                        />
+    // クリック外判定でドロップダウンを閉じる
+    useOutsideClick(wrapperRef, () => {
+        if (item.isSearching) onBlur();
+    });
 
-                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                            <table className="table">
-                                <thead>
-                                    <tr>
-                                        <th>JANコード</th>
-                                        <th>商品名</th>
-                                        <th>規格</th>
-                                        <th>メーカー</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredProducts.map(product => (
-                                        <tr key={product.id}>
-                                            <td>{product.janCode}</td>
-                                            <td>{product.productName}</td>
-                                            <td>{product.specification}</td>
-                                            <td>{product.makerName}</td>
-                                            <td>
-                                                <button
-                                                    onClick={() => selectProduct(product)}
-                                                    className="btn btn-sm btn-primary"
-                                                >
-                                                    選択
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
+    const filtered = item.isSearching && localValue.length > 0
+        ? productMaster.filter(p =>
+            p.salesStatus !== '廃盤' &&
+            (p.janCode.includes(localValue) || p.productName.toLowerCase().includes(localValue.toLowerCase()))
+        ).slice(0, 10) // 最大10件表示
+        : [];
 
-            {/* 確認モーダル */}
-            {showConfirmModal && (
-                <div className="modal-overlay">
-                    <div className="modal">
-                        <div className="modal-header">
-                            <h2 className="modal-title">保存確認</h2>
-                        </div>
-                        <p>以下の内容で発注書を保存しますか？</p>
-                        <div style={{
-                            background: 'var(--bg-tertiary)',
-                            padding: 'var(--spacing-md)',
-                            borderRadius: 'var(--radius-md)',
-                            margin: 'var(--spacing-md) 0'
-                        }}>
-                            <p><strong>品目数:</strong> {orderItems.filter(i => i.janCode && i.quantity > 0).length}品目</p>
-                            <p><strong>総数量:</strong> {orderItems.reduce((sum, i) => sum + (i.quantity || 0), 0)}ケース</p>
-                        </div>
-                        <div className="modal-footer">
-                            <button onClick={() => setShowConfirmModal(false)} className="btn btn-secondary">キャンセル</button>
-                            <button onClick={() => confirmOrder()} className="btn btn-success">保存する</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+    return (
+        <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+            <input
+                type="text"
+                className="form-input"
+                placeholder="JANまたは商品名..."
+                value={localValue}
+                onChange={(e) => {
+                    setLocalValue(e.target.value);
+                    if (!item.isSearching) onFocus(); // 強制的に検索状態にする
+                    onSearchChange(e.target.value);
+                }}
+                onFocus={onFocus}
+                style={{
+                    padding: '6px',
+                    width: '100%',
+                    background: item.janCode ? 'transparent' : '#fff',
+                    border: !item.janCode && item.quantity > 0 ? '1px solid var(--danger)' : ''
+                }}
+            />
 
-            {/* 二重発注警告モーダル */}
-            {showDuplicateWarning && (
-                <div className="modal-overlay">
-                    <div className="modal">
-                        <div className="modal-header">
-                            <h2 className="modal-title" style={{ color: 'var(--warning)' }}>⚠️ 二重発注の確認</h2>
+            {/* 検索ドロップダウン */}
+            {item.isSearching && localValue.length > 0 && (
+                <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: 'white',
+                    border: '1px solid var(--primary)',
+                    borderRadius: '4px',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                    zIndex: 1000,
+                    maxHeight: '250px',
+                    overflowY: 'auto',
+                    marginTop: '2px'
+                }}>
+                    {filtered.length > 0 ? (
+                        filtered.map(p => (
+                            <div
+                                key={p.id}
+                                style={{
+                                    padding: '8px 12px',
+                                    borderBottom: '1px solid #f1f5f9',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between'
+                                }}
+                                onMouseDown={(e) => {
+                                    // onClickより早く発火させるためにonMouseDownを使用（blurによる非表示対策）
+                                    e.preventDefault();
+                                    onSelect(p);
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0fdfa'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                            >
+                                <div>
+                                    <div style={{ color: '#64748b', fontSize: '0.75rem' }}>{p.janCode}</div>
+                                    <div style={{ fontWeight: 'bold' }}>{p.productName}</div>
+                                </div>
+                                <div style={{ textAlign: 'right', color: '#64748b' }}>
+                                    <div>{p.specification}</div>
+                                    <div style={{ color: 'var(--primary)' }}>¥{p.price.toLocaleString()}</div>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div style={{ padding: '10px', color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>
+                            該当する商品が見つかりません
                         </div>
-                        <div className="alert alert-warning" style={{ margin: 'var(--spacing-md) 0' }}>
-                            同じ内容の注文が1時間以内に既に送信されています。
-                        </div>
-                        <p>それでも発注を続けますか？</p>
-                        <div className="modal-footer">
-                            <button onClick={() => setShowDuplicateWarning(false)} className="btn btn-secondary">キャンセル</button>
-                            <button onClick={() => confirmOrder(true)} className="btn btn-warning">続行する</button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             )}
         </div>

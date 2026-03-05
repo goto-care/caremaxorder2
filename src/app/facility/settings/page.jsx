@@ -1,17 +1,8 @@
 'use client';
 import { useState } from 'react';
+import OrderFormatBuilder from '@/components/orderFormatBuilder/OrderFormatBuilder';
 
 export default function OrderSettings() {
-    const [columns, setColumns] = useState([
-        { id: 'no', name: 'No', required: true, enabled: true, width: 50 },
-        { id: 'janCode', name: 'JANコード', required: true, enabled: true, width: 140 },
-        { id: 'productName', name: '商品名', required: true, enabled: true, width: 200 },
-        { id: 'specification', name: '規格', required: true, enabled: true, width: 120 },
-        { id: 'caseQuantity', name: 'ケース入数', required: false, enabled: true, width: 80 },
-        { id: 'quantity', name: '数量', required: true, enabled: true, width: 80 },
-        { id: 'remarks', name: '備考', required: false, enabled: true, width: 150 },
-    ]);
-
     const [customFields, setCustomFields] = useState([
         { id: '1', type: 'text', label: '施設名', value: 'サンプル病院', position: 'header' },
         { id: '2', type: 'text', label: '担当者', value: '', position: 'header' },
@@ -21,29 +12,11 @@ export default function OrderSettings() {
     const [remarksCount, setRemarksCount] = useState(2);
 
     const [showAddFieldModal, setShowAddFieldModal] = useState(false);
-    const [showAddCustomColModal, setShowAddCustomColModal] = useState(false);
     const [newField, setNewField] = useState({
         type: 'text',
         label: '',
         position: 'header'
     });
-    const [newCustomCol, setNewCustomCol] = useState('');
-
-    // 列の表示切り替え
-    const toggleColumn = (id) => {
-        setColumns(columns.map(col =>
-            col.id === id && !col.required
-                ? { ...col, enabled: !col.enabled }
-                : col
-        ));
-    };
-
-    // 列の幅変更
-    const updateColumnWidth = (id, width) => {
-        setColumns(columns.map(col =>
-            col.id === id ? { ...col, width: parseInt(width) || 50 } : col
-        ));
-    };
 
     // カスタムフィールド追加
     const addCustomField = () => {
@@ -61,28 +34,9 @@ export default function OrderSettings() {
         setCustomFields(customFields.filter(f => f.id !== id));
     };
 
-    // カスタム列（テーブル内）追加
-    const addCustomTableColumn = () => {
-        if (!newCustomCol) return;
-        setColumns([
-            ...columns,
-            { id: `custom_${Date.now()}`, name: newCustomCol, required: false, enabled: true, width: 100, isCustom: true }
-        ]);
-        setNewCustomCol('');
-        setShowAddCustomColModal(false);
-    };
-
-    // カスタム列削除
-    const removeCustomTableColumn = (id) => {
-        if (confirm('この列を削除してもよろしいですか？')) {
-            setColumns(columns.filter(col => col.id !== id));
-        }
-    };
-
-    // 設定保存
+    // 設定保存（カスタムフィールド・お届け先等）
     const handleSave = () => {
         const settings = {
-            columns,
             customFields,
             deliveryAddressCount,
             remarksCount
@@ -98,92 +52,16 @@ export default function OrderSettings() {
                     <h1>発注書設定</h1>
                     <p className="text-muted">発注書のレイアウトと項目をカスタマイズできます</p>
                 </div>
-                <button onClick={handleSave} className="btn btn-primary">
-                    💾 設定を保存
+                <button onClick={handleSave} className="btn btn-secondary">
+                    💾 その他設定を保存
                 </button>
             </div>
 
-            {/* インタラクティブプレビュー（列設定） */}
-            <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <div className="card-header">
-                    <h2 className="card-title">👁️ 表示列のレイアウト設定</h2>
-                    <button onClick={() => setShowAddCustomColModal(true)} className="btn btn-secondary btn-sm">
-                        ➕ テーブルに列を追加
-                    </button>
-                </div>
-                <p className="text-muted" style={{ marginBottom: 'var(--spacing-md)' }}>
-                    プレビュー上のヘッダーを直接操作して、項目の表示/非表示や列幅を調整できます。「表示」のチェックを外すと項目が隠れます。
-                </p>
-                <div className="table-container" style={{ overflowX: 'auto', paddingBottom: '20px' }}>
-                    <div className="order-form" style={{ minWidth: '800px', transform: 'scale(0.95)', transformOrigin: 'top left' }}>
-                        <div className="order-form-header">
-                            <h2 className="order-form-title">発 注 書</h2>
-                            {customFields.filter(f => f.position === 'header').map(field => (
-                                <p key={field.id}><strong>{field.label}:</strong> {field.value || '____________'}</p>
-                            ))}
-                        </div>
-                        <table className="order-table" style={{ tableLayout: 'fixed', width: '100%', wordBreak: 'break-word' }}>
-                            <thead>
-                                <tr>
-                                    {columns.filter(c => c.enabled).map(col => {
-                                        // 固定幅の項目
-                                        const isFixed = col.id === 'no' || col.id === 'janCode';
-                                        const fixedWidth = col.id === 'no' ? '45px' : (col.id === 'janCode' ? '130px' : `${col.width}px`);
-
-                                        return (
-                                            <th key={col.id} style={{ width: fixedWidth, minWidth: isFixed ? fixedWidth : '80px', backgroundColor: 'var(--bg-tertiary)', verticalAlign: 'top', padding: '10px' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <strong style={{ fontSize: '13px', whiteSpace: 'normal', textAlign: 'center' }}>{col.name}</strong>
-                                                        {col.isCustom && (
-                                                            <button onClick={() => removeCustomTableColumn(col.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}>✕</button>
-                                                        )}
-                                                    </div>
-                                                    {col.required ? (
-                                                        <span className="badge badge-warning" style={{ fontSize: '10px' }}>必須</span>
-                                                    ) : (
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer' }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={col.enabled}
-                                                                onChange={() => toggleColumn(col.id)}
-                                                            />
-                                                            表示
-                                                        </label>
-                                                    )}
-                                                    {!isFixed && (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <input
-                                                                type="number"
-                                                                className="form-input"
-                                                                value={col.width}
-                                                                onChange={(e) => updateColumnWidth(col.id, e.target.value)}
-                                                                style={{ width: '60px', padding: '2px 4px', fontSize: '12px', textAlign: 'center' }}
-                                                                min="40"
-                                                                max="500"
-                                                            />
-                                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>px</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </th>
-                                        );
-                                    })}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    {columns.filter(c => c.enabled).map(col => (
-                                        <td key={col.id} style={{ textAlign: 'center', wordBreak: 'break-word' }}>
-                                            {col.id === 'no' ? '1' : '...'}
-                                        </td>
-                                    ))}
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+            {/* ===== kintone風フォーマットビルダー ===== */}
+            <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <OrderFormatBuilder />
             </div>
+
 
             {/* お届け先・備考設定 */}
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
@@ -271,32 +149,6 @@ export default function OrderSettings() {
             </div>
 
 
-
-            {/* テーブル列追加モーダル */}
-            {showAddCustomColModal && (
-                <div className="modal-overlay" onClick={() => setShowAddCustomColModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h2 className="modal-title">テーブルに列を追加</h2>
-                            <button className="modal-close" onClick={() => setShowAddCustomColModal(false)}>×</button>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">列名</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={newCustomCol}
-                                onChange={(e) => setNewCustomCol(e.target.value)}
-                                placeholder="例: サイズ、カラーなど"
-                            />
-                        </div>
-                        <div className="modal-footer">
-                            <button onClick={() => setShowAddCustomColModal(false)} className="btn btn-secondary">キャンセル</button>
-                            <button onClick={addCustomTableColumn} className="btn btn-primary">追加</button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* カスタムフィールド追加モーダル（ヘッダー・フッター用） */}
             {showAddFieldModal && (

@@ -6,9 +6,9 @@
 
 :root {
   /* カラーパレット */
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --primary-light: #3b82f6;
+  --primary: #0d9488;
+  --primary-dark: #0f766e;
+  --primary-light: #14b8a6;
   --secondary: #64748b;
   --success: #059669;
   --warning: #d97706;
@@ -58,7 +58,8 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   font-family: var(--font-sans);
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -74,7 +75,7 @@ html, body {
 
 .sidebar {
   width: 280px;
-  background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+  background: linear-gradient(180deg, #115e59 0%, #134e4a 100%);
   border-right: none;
   padding: var(--spacing-lg);
   display: flex;
@@ -84,7 +85,7 @@ html, body {
 
 .sidebar-header {
   padding-bottom: var(--spacing-lg);
-  border-bottom: 1px solid rgba(255,255,255,0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   margin-bottom: var(--spacing-lg);
 }
 
@@ -106,19 +107,19 @@ html, body {
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  color: rgba(255,255,255,0.85);
+  color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
   transition: all 0.2s ease;
   margin-bottom: var(--spacing-xs);
 }
 
 .nav-item:hover {
-  background-color: rgba(255,255,255,0.15);
+  background-color: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
 
 .nav-item.active {
-  background-color: rgba(255,255,255,0.25);
+  background-color: rgba(255, 255, 255, 0.25);
   color: white;
 }
 
@@ -379,8 +380,15 @@ html, body {
 }
 
 @keyframes pulse-new {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
 }
 
 /* モーダル */
@@ -554,31 +562,135 @@ html, body {
 }
 
 /* ユーティリティ */
-.text-center { text-align: center; }
-.text-right { text-align: right; }
-.text-muted { color: var(--text-muted); }
-.text-success { color: var(--success); }
-.text-danger { color: var(--danger); }
-.text-warning { color: var(--warning); }
+.text-center {
+  text-align: center;
+}
 
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.justify-center { justify-content: center; }
-.gap-sm { gap: var(--spacing-sm); }
-.gap-md { gap: var(--spacing-md); }
-.gap-lg { gap: var(--spacing-lg); }
+.text-right {
+  text-align: right;
+}
 
-.mt-sm { margin-top: var(--spacing-sm); }
-.mt-md { margin-top: var(--spacing-md); }
-.mt-lg { margin-top: var(--spacing-lg); }
-.mb-sm { margin-bottom: var(--spacing-sm); }
-.mb-md { margin-bottom: var(--spacing-md); }
-.mb-lg { margin-bottom: var(--spacing-lg); }
+.text-muted {
+  color: var(--text-muted);
+}
 
-.w-full { width: 100%; }
-.h-full { height: 100%; }
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.text-warning {
+  color: var(--warning);
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+/* =========================================
+   4-Column CSS Grid System for Form Builder
+   Grid placement is done via inline styles
+   (gridColumn) to avoid Tailwind JIT purging
+========================================= */
+
+/* Grid containers */
+.fb-canvas-form,
+.dynamic-form-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: var(--spacing-md);
+  align-content: start;
+}
+
+/* Mobile: force single-column stack */
+@media screen and (max-width: 767px) {
+
+  .fb-canvas-form,
+  .dynamic-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .fb-canvas-form>*,
+  .dynamic-form-grid>* {
+    grid-column: span 1 !important;
+  }
+}
+
+/* Spacer block (invisible placeholder for empty grid cells) */
+.spacer-block {
+  min-height: 40px;
+  border: 2px dashed #cbd5e1;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  background: #f8fafc;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.gap-sm {
+  gap: var(--spacing-sm);
+}
+
+.gap-md {
+  gap: var(--spacing-md);
+}
+
+.gap-lg {
+  gap: var(--spacing-lg);
+}
+
+.mt-sm {
+  margin-top: var(--spacing-sm);
+}
+
+.mt-md {
+  margin-top: var(--spacing-md);
+}
+
+.mt-lg {
+  margin-top: var(--spacing-lg);
+}
+
+.mb-sm {
+  margin-bottom: var(--spacing-sm);
+}
+
+.mb-md {
+  margin-bottom: var(--spacing-md);
+}
+
+.mb-lg {
+  margin-bottom: var(--spacing-lg);
+}
+
+.w-full {
+  width: 100%;
+}
+
+.h-full {
+  height: 100%;
+}
 
 /* ログインページ */
 .login-container {
@@ -586,7 +698,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #0891b2 100%);
+  background: linear-gradient(135deg, #134e4a 0%, #0d9488 50%, #0891b2 100%);
 }
 
 .login-card {
@@ -617,6 +729,454 @@ html, body {
   color: var(--text-muted);
   margin-top: var(--spacing-sm);
 }
+
+/* ===== 3ペイン型 フォームビルダー ===== */
+.fb-root {
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 500px;
+}
+
+.fb-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-tertiary);
+}
+
+.fb-header-left,
+.fb-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.fb-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.fb-pane {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  overflow: hidden;
+}
+
+.fb-pane-header {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.fb-pane-body {
+  padding: var(--spacing-md);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.fb-pane-body.p-0 {
+  padding: 0;
+}
+
+/* 1. 左ペイン（ツールボックス） */
+.fb-toolbox-pane {
+  width: 250px;
+  min-width: 250px;
+  border-right: 1px solid var(--border-light);
+}
+
+.fb-toolbox-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  cursor: grab;
+  user-select: none;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.fb-toolbox-item:hover:not(.disabled) {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.fb-toolbox-item:active:not(.disabled) {
+  cursor: grabbing;
+}
+
+.fb-toolbox-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+  border-style: dashed;
+}
+
+.fb-toolbox-item.dragging {
+  opacity: 0.5;
+  background: #f0fdfa;
+  border-color: var(--primary);
+}
+
+.fb-toolbox-item.dragging-overlay {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+  opacity: 1;
+  transform: rotate(2deg);
+  cursor: grabbing;
+}
+
+.fb-toolbox-icon {
+  font-size: 1.1em;
+  opacity: 0.8;
+}
+
+/* 2. 中央ペイン（キャンバス） */
+.fb-canvas-pane {
+  flex: 1;
+  min-width: 400px;
+  background: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.fb-canvas-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: var(--spacing-lg);
+  align-items: center;
+}
+
+.fb-canvas-header {
+  width: 100%;
+  max-width: 800px;
+  margin-bottom: var(--spacing-md);
+}
+
+.fb-canvas-header h3 {
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.fb-canvas-area {
+  width: 100%;
+  max-width: 800px;
+  min-height: 250px;
+  height: auto;
+  background: white;
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  overflow: visible;
+}
+
+.fb-canvas-area.drag-over {
+  border-color: var(--primary);
+  background: #f8fafc;
+}
+
+.fb-canvas-empty-msg {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 1rem;
+  text-align: center;
+  min-height: 300px;
+}
+
+.fb-canvas-item {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: white;
+  transition: all 0.2s;
+  box-shadow: inset 0 0 0 1px var(--border-light);
+}
+
+.fb-canvas-item:hover {
+  box-shadow: inset 0 0 0 1px var(--border-color);
+}
+
+.fb-canvas-item.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.2);
+  z-index: 10;
+}
+
+.fb-canvas-item.dragging {
+  opacity: 0.4;
+  box-shadow: var(--shadow-sm);
+}
+
+.fb-canvas-item-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.fb-canvas-item:hover .fb-canvas-item-controls,
+.fb-canvas-item.active .fb-canvas-item-controls {
+  opacity: 1;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.btn-remove {
+  background: white;
+  border: 1px solid var(--border-light);
+  color: var(--danger);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.btn-remove:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.fb-canvas-item-content {
+  padding: var(--spacing-lg);
+  cursor: pointer;
+}
+
+.item-label-container {
+  margin-bottom: var(--spacing-xs);
+}
+
+.item-label {
+  font-weight: bold;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.req-badge {
+  font-size: 0.65rem;
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.preview-input {
+  width: 100%;
+  pointer-events: none;
+  background: #f8fafc;
+  color: var(--text-muted);
+}
+
+.product-table-preview {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.pt-header {
+  background: #f1f5f9;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+}
+
+.pt-header span {
+  font-weight: bold;
+  color: var(--primary-dark);
+}
+
+.pt-header small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.pseudo-table {
+  margin: 0;
+  border: none;
+  width: 100%;
+}
+
+.pseudo-table th,
+.pseudo-table td {
+  padding: 8px;
+  font-size: 0.8rem;
+  border-left: none;
+  border-right: 1px solid var(--border-light);
+}
+
+.pseudo-search {
+  padding: 4px 8px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  color: #92400e;
+}
+
+.pseudo-qty {
+  width: 50px;
+  padding: 4px;
+  background: white;
+  border: 1px solid var(--border-color);
+  text-align: right;
+  border-radius: 4px;
+}
+
+.pseudo-input {
+  width: 100%;
+  height: 24px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+/* 3. 右ペイン（プロパティ設定） */
+.fb-properties-pane {
+  width: 300px;
+  min-width: 300px;
+  border-left: 1px solid var(--border-light);
+  background: #f8fafc;
+}
+
+.fb-properties-empty {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.fb-properties-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.fb-properties-header {
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+}
+
+.fb-properties-header h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.badge {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.fb-properties-body {
+  padding: var(--spacing-md);
+}
+
+.prop-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.prop-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.prop-group .req {
+  color: var(--danger);
+}
+
+.info-group {
+  background: rgba(13, 148, 136, 0.05);
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+}
+
+.info-group p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.checkbox-group {
+  margin-top: var(--spacing-lg);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: normal !important;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
 
 /* レスポンシブ */
 @media (max-width: 768px) {
