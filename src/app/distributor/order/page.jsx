@@ -626,23 +626,24 @@ export default function DistributorOrderPage() {
             {/* 商品選択モーダル */}
             {showProductModal && (
                 <div className="modal-overlay" onClick={() => setShowProductModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+                    <div className="modal product-picker-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <h2 className="modal-title">商品を選択</h2>
                             <button className="modal-close" onClick={() => setShowProductModal(false)}>×</button>
                         </div>
 
-                        <input
-                            type="text"
-                            className="form-input"
-                            placeholder="商品名、JANコード、メーカー名で検索..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{ marginBottom: 'var(--spacing-md)' }}
-                        />
+                        <div className="product-picker-filters product-picker-filters-single">
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="商品名、JANコード、メーカー名で検索..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
 
-                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                            <table className="table">
+                        <div className="product-picker-results">
+                            <table className="table product-picker-table">
                                 <thead>
                                     <tr>
                                         <th>JANコード</th>
@@ -655,14 +656,22 @@ export default function DistributorOrderPage() {
                                 <tbody>
                                     {filteredProducts.map(product => (
                                         <tr key={product.id}>
-                                            <td>{product.janCode}</td>
-                                            <td>{product.productName}</td>
-                                            <td>{product.specification}</td>
-                                            <td>{product.makerName}</td>
+                                            <td title={product.janCode}>
+                                                <span className="product-picker-cell">{product.janCode}</span>
+                                            </td>
+                                            <td title={product.productName}>
+                                                <span className="product-picker-cell">{product.productName}</span>
+                                            </td>
+                                            <td title={product.specification}>
+                                                <span className="product-picker-cell">{product.specification}</span>
+                                            </td>
+                                            <td title={product.makerName}>
+                                                <span className="product-picker-cell">{product.makerName}</span>
+                                            </td>
                                             <td>
                                                 <button
                                                     onClick={() => selectProduct(product)}
-                                                    className="btn btn-sm btn-primary"
+                                                    className="btn btn-sm btn-primary product-picker-action"
                                                 >
                                                     選択
                                                 </button>

@@ -1,26 +1,67 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getProducts, saveProducts } from '@/utils/storageUtils';
 
-// カスタムフック：クリック外判定
-function useOutsideClick(ref, handler) {
-    useEffect(() => {
-        const listener = (event) => {
-            if (!ref.current || ref.current.contains(event.target)) return;
-            handler(event);
-        };
-        document.addEventListener('mousedown', listener);
-        document.addEventListener('touchstart', listener);
-        return () => {
-            document.removeEventListener('mousedown', listener);
-            document.removeEventListener('touchstart', listener);
-        };
-    }, [ref, handler]);
-}
+// カスタムフック：クリック外判定 (SearchCell削除に伴い不要だが、他で使うかもしれないので一応残すか削除する。今回は削除)
+
+// ---- テーブル設定のデフォルトフォールバック ----
+const DEFAULT_COLUMNS = [
+    { id: 'jan', label: 'JAN/商品コード', type: 'text', locked: true, visible: true, width: 140, editLocked: true },
+    { id: 'name', label: '商品名', type: 'text', locked: true, visible: true, width: 200, editLocked: true },
+    { id: 'spec', label: '規格', type: 'text', locked: false, visible: true, width: 100, editLocked: true },
+    { id: 'quantity', label: '数量', type: 'number', locked: true, visible: true, width: 80, editLocked: false },
+    { id: 'unitPrice', label: '単価', type: 'number', locked: false, visible: true, width: 100, editLocked: true },
+    { id: 'subtotal', label: '小計', type: 'computed', locked: false, visible: true, width: 100, editLocked: true },
+    { id: 'remarks', label: '備考', type: 'text', locked: false, visible: true, width: 150, editLocked: false },
+];
+const DEFAULT_TABLE_CONFIG = {
+    columns: DEFAULT_COLUMNS,
+    showTotal: true,
+    initialRows: 5,
+    maxRows: null,
+};
+
+const createEmptyOrderItem = () => ({
+    id: uuidv4(),
+    janCode: '',
+    productName: '',
+    specification: '',
+    price: 0,
+    quantity: 0,
+    remarks: '',
+    customColumns: {}
+});
+
+const buildOrderItemsFromTemplate = (items = []) => items.map(item => ({
+    id: uuidv4(),
+    janCode: item.janCode || '',
+    productName: item.productName || '',
+    specification: item.specification || '',
+    price: item.price || 0,
+    quantity: Number(item.quantity) || 0,
+    remarks: item.remarks || '',
+    customColumns: item.customColumns || {}
+}));
+
+const getStoredOrderTemplates = () => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+        return JSON.parse(localStorage.getItem('orderTemplates') || '[]');
+    } catch {
+        return [];
+    }
+};
+
+const saveStoredOrderTemplates = (templates) => {
+    if (typeof window === 'undefined') return;
+
+    localStorage.setItem('orderTemplates', JSON.stringify(templates));
+};
 
 const initialProducts = [
     { id: '1', originalCode: 'ORG-00001', janCode: '4901234567890', webCode: '123456', productName: 'シリンジ 10ml', specification: '100本/箱', caseQuantity: 10, supplierId: 'S001', supplierName: '仕入先A', makerId: 'M001', makerName: 'メーカーA', salesStatus: '', price: 1500 },
@@ -41,18 +82,49 @@ export default function OrderPage() {
 
     // 商品明細テーブル用データ
     const [orderItems, setOrderItems] = useState([
-        { id: uuidv4(), searchKey: '', janCode: '', productName: '', specification: '', price: 0, quantity: 0, remarks: '', isSearching: false }
+        createEmptyOrderItem()
     ]);
+
+    // モーダル制御
+    const [showProductModal, setShowProductModal] = useState(false);
+    const [currentRowId, setCurrentRowId] = useState(null);
+    const [searchJan, setSearchJan] = useState('');
+    const [searchName, setSearchName] = useState('');
+    const [searchMaker, setSearchMaker] = useState('');
 
     // Validation
     const [errors, setErrors] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // 2. フォーマット適用
+    function applyFormat(format, templateData = null) {
+        setSelectedFormat(format);
+        const newFormValues = {};
+        let initialItemCount = 1;
+
+        format.fields.forEach(f => {
+            if (f.type !== 'product-table') {
+                newFormValues[f.id] = templateData?.customValues?.[f.id] || '';
+            } else {
+                const tConf = f.tableConfig || DEFAULT_TABLE_CONFIG;
+                initialItemCount = Math.max(1, tConf.initialRows || 5);
+            }
+        });
+
+        setFormValues(newFormValues);
+
+        const initialItems = templateData?.items?.length
+            ? buildOrderItemsFromTemplate(templateData.items)
+            : Array.from({ length: initialItemCount }, () => createEmptyOrderItem());
+
+        setOrderItems(initialItems);
+        setErrors([]);
+    }
+
     // 1. 初期データロード
     useEffect(() => {
         const savedProds = getProducts();
         if (savedProds && savedProds.length > 0) {
-            // 単価がない場合は適当に付与
             const prodsWithPrice = savedProds.map(p => ({ ...p, price: p.price || Math.floor(Math.random() * 5000) + 100 }));
             setProductMaster(prodsWithPrice);
         } else {
@@ -61,28 +133,23 @@ export default function OrderPage() {
         }
 
         const formatsStr = localStorage.getItem('orderFormats');
-        if (formatsStr) {
-            const formats = JSON.parse(formatsStr);
-            setSavedFormats(formats);
-            if (formats.length > 0) {
-                applyFormat(formats[0]);
-            }
-        }
-    }, []);
+        if (!formatsStr) return;
 
-    // 2. フォーマット適用
-    const applyFormat = (format) => {
-        setSelectedFormat(format);
-        // カスタムフィールドの初期化
-        const newFormValues = {};
-        format.fields.forEach(f => {
-            if (f.type !== 'product-table') {
-                newFormValues[f.id] = '';
-            }
-        });
-        setFormValues(newFormValues);
-        setErrors([]);
-    };
+        const formats = JSON.parse(formatsStr);
+        setSavedFormats(formats);
+
+        if (formats.length === 0) return;
+
+        const templateId = new URLSearchParams(window.location.search).get('template');
+        const selectedTemplate = templateId
+            ? getStoredOrderTemplates().find(template => template.id === templateId)
+            : null;
+        const initialFormat = selectedTemplate
+            ? formats.find(format => format.id === selectedTemplate.formatId) || formats[0]
+            : formats[0];
+
+        applyFormat(initialFormat, selectedTemplate);
+    }, []);
 
     const handleFormatChange = (e) => {
         const formatId = e.target.value;
@@ -99,7 +166,16 @@ export default function OrderPage() {
     // テーブル操作系
     // ------------------------------------
     const addRow = () => {
-        setOrderItems([...orderItems, { id: uuidv4(), searchKey: '', janCode: '', productName: '', specification: '', price: 0, quantity: 0, remarks: '', isSearching: false }]);
+        if (!selectedFormat) return;
+        const tableField = selectedFormat.fields.find(f => f.type === 'product-table');
+        const tConf = tableField?.tableConfig || DEFAULT_TABLE_CONFIG;
+
+        if (tConf.maxRows && orderItems.length >= tConf.maxRows) {
+            alert(`これ以上行を追加できません（最大 ${tConf.maxRows} 行まで）`);
+            return;
+        }
+
+        setOrderItems([...orderItems, createEmptyOrderItem()]);
     };
 
     const removeRow = (id) => {
@@ -112,32 +188,40 @@ export default function OrderPage() {
         setOrderItems(orderItems.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
-    // インクリメンタルサーチ
-    const handleSearchKeyChange = (id, value) => {
-        updateRow(id, 'searchKey', value);
-        updateRow(id, 'isSearching', true);
-        // 入力変更時は一旦確定済みデータをクリア
-        updateRow(id, 'janCode', '');
-        updateRow(id, 'productName', '');
-        updateRow(id, 'specification', '');
-        updateRow(id, 'price', 0);
+    // 商品選択モーダルを開く
+    const openProductModal = (rowId) => {
+        setCurrentRowId(rowId);
+        setSearchJan('');
+        setSearchName('');
+        setSearchMaker('');
+        setShowProductModal(true);
     };
 
-    const selectProduct = (id, product) => {
+    const selectProduct = (product) => {
         if (product.salesStatus === '廃盤') {
             alert('この商品は廃盤のため発注できません。');
             return;
         }
-        setOrderItems(orderItems.map(item => item.id === id ? {
+        setOrderItems(orderItems.map(item => item.id === currentRowId ? {
             ...item,
-            searchKey: `${product.janCode} - ${product.productName}`,
             janCode: product.janCode,
             productName: product.productName,
             specification: product.specification,
-            price: product.price || 0,
-            isSearching: false
+            price: product.price || 0
         } : item));
+        setShowProductModal(false);
     };
+
+    // 検索フィルタ（廃盤商品は除外）
+    const filteredProducts = productMaster.filter(p => {
+        if (p.salesStatus === '廃盤') return false;
+
+        const matchJan = searchJan === '' || (p.janCode && p.janCode.includes(searchJan));
+        const matchName = searchName === '' || (p.productName && p.productName.toLowerCase().includes(searchName.toLowerCase()));
+        const matchMaker = searchMaker === '' || (p.makerName && p.makerName.toLowerCase().includes(searchMaker.toLowerCase()));
+
+        return matchJan && matchName && matchMaker;
+    });
 
     // ------------------------------------
     // 計算ロジック
@@ -189,7 +273,8 @@ export default function OrderPage() {
                     price: item.price,
                     quantity: parseInt(item.quantity) || 0,
                     subtotal: item.price * (parseInt(item.quantity) || 0),
-                    remarks: item.remarks
+                    remarks: item.remarks || '',
+                    customColumns: item.customColumns || {}
                 })),
                 amount: {
                     subtotal,
@@ -202,11 +287,30 @@ export default function OrderPage() {
             };
 
             await addDoc(collection(db, 'orders'), orderData);
-            alert('発注を送信しました！');
 
-            // リセット
+            const now = new Date();
+            const template = {
+                id: `TPL-${uuidv4()}`,
+                name: `${selectedFormat.name} (${now.toLocaleDateString('ja-JP')} 発注分)`,
+                formatId: selectedFormat.id,
+                formatName: selectedFormat.name,
+                customValues: formValues,
+                items: validItems.map(item => ({
+                    janCode: item.janCode,
+                    productName: item.productName,
+                    specification: item.specification,
+                    price: item.price,
+                    quantity: parseInt(item.quantity) || 0,
+                    remarks: item.remarks || '',
+                    customColumns: item.customColumns || {}
+                })),
+                savedAt: now.toISOString()
+            };
+            saveStoredOrderTemplates([template, ...getStoredOrderTemplates()]);
+
+            alert('発注を送信し、「いつもの注文」に保存しました。');
+
             applyFormat(selectedFormat);
-            setOrderItems([{ id: uuidv4(), searchKey: '', janCode: '', productName: '', specification: '', price: 0, quantity: 0, remarks: '', isSearching: false }]);
 
         } catch (error) {
             console.error('Submit error:', error);
@@ -231,7 +335,7 @@ export default function OrderPage() {
     return (
         <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                <h1>発注入力</h1>
+                <h1>発注書作成</h1>
                 <select className="form-input" value={selectedFormat?.id || ''} onChange={handleFormatChange} style={{ width: '250px' }}>
                     {savedFormats.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
@@ -255,22 +359,123 @@ export default function OrderPage() {
                     {selectedFormat.fields.map(field => {
                         // ==== 商品明細テーブル ====
                         if (field.type === 'product-table') {
+                            const tConf = field.tableConfig || DEFAULT_TABLE_CONFIG;
+                            const visibleCols = tConf.columns.filter(c => c.visible);
+
+                            const renderDynamicCell = (col, item, updateRowStr) => {
+                                const isLocked = col.editLocked;
+
+                                // 標準マッピング列
+                                if (col.id === 'jan') {
+                                    return (
+                                        <input
+                                            type="text"
+                                            className="form-input"
+                                            readOnly
+                                            placeholder="選択..."
+                                            value={item.janCode}
+                                            onClick={() => openProductModal(item.id)}
+                                            style={{
+                                                cursor: 'pointer',
+                                                padding: '6px',
+                                                background: item.janCode ? 'transparent' : '#fef3c7',
+                                                border: !item.janCode && item.quantity > 0 ? '1px solid var(--danger)' : ''
+                                            }}
+                                        />
+                                    );
+                                }
+                                if (col.id === 'name') {
+                                    return (
+                                        <input
+                                            type="text"
+                                            className="form-input"
+                                            readOnly
+                                            placeholder="商品を選択してください"
+                                            value={item.productName}
+                                            onClick={() => openProductModal(item.id)}
+                                            style={{
+                                                cursor: 'pointer',
+                                                padding: '6px',
+                                                background: 'transparent'
+                                            }}
+                                        />
+                                    );
+                                }
+                                if (col.id === 'spec') return <div style={{ color: '#64748b' }}>{item.specification}</div>;
+                                if (col.id === 'quantity') {
+                                    return (
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="form-input"
+                                            value={item.quantity === 0 ? '' : item.quantity}
+                                            onChange={(e) => updateRow(item.id, 'quantity', e.target.value)}
+                                            disabled={isLocked}
+                                            style={{ padding: '6px', textAlign: 'right', border: item.janCode && !item.quantity && !isLocked ? '1px solid var(--danger)' : '' }}
+                                        />
+                                    );
+                                }
+                                if (col.id === 'unitPrice') {
+                                    return <div style={{ textAlign: 'right', color: '#64748b' }}>{item.price > 0 ? item.price.toLocaleString() : ''}</div>;
+                                }
+                                if (col.id === 'subtotal' || col.type === 'computed') {
+                                    return <div style={{ fontWeight: 'bold', textAlign: 'right' }}>{(item.price * (parseInt(item.quantity) || 0)).toLocaleString()}</div>;
+                                }
+                                if (col.id === 'remarks') {
+                                    return (
+                                        <input
+                                            type="text"
+                                            className="form-input"
+                                            value={item.remarks}
+                                            onChange={(e) => updateRow(item.id, 'remarks', e.target.value)}
+                                            disabled={isLocked}
+                                            style={{ padding: '6px' }}
+                                        />
+                                    );
+                                }
+
+                                // カスタム列の処理
+                                const customVal = (item.customColumns && item.customColumns[col.id]) || '';
+                                const handleCustomChange = (val) => {
+                                    updateRow(item.id, 'customColumns', { ...item.customColumns, [col.id]: val });
+                                };
+
+                                switch (col.type) {
+                                    case 'select':
+                                        return (
+                                            <select className="form-input" value={customVal} onChange={(e) => handleCustomChange(e.target.value)} disabled={isLocked} style={{ padding: '6px' }}>
+                                                <option value=""></option>
+                                                <option value="Option A">Option A</option>
+                                                <option value="Option B">Option B</option>
+                                            </select>
+                                        );
+                                    case 'date':
+                                        return <input type="date" className="form-input" value={customVal} onChange={(e) => handleCustomChange(e.target.value)} disabled={isLocked} style={{ padding: '6px' }} />;
+                                    case 'number':
+                                        return <input type="number" className="form-input" value={customVal} onChange={(e) => handleCustomChange(e.target.value)} disabled={isLocked} style={{ padding: '6px', textAlign: 'right' }} />;
+                                    case 'textarea':
+                                        return <textarea className="form-input" value={customVal} onChange={(e) => handleCustomChange(e.target.value)} disabled={isLocked} rows="1" style={{ padding: '6px', resize: 'vertical', minHeight: '34px' }} />;
+                                    case 'text':
+                                    default:
+                                        return <input type="text" className="form-input" value={customVal} onChange={(e) => handleCustomChange(e.target.value)} disabled={isLocked} style={{ padding: '6px' }} />;
+                                }
+                            };
+
                             return (
                                 <div key={field.id} className="form-section field-block-wrapper" style={{ gridRow: field.row || 'auto', gridColumn: field.col ? `${field.col} / span 4` : 'span 4' }}>
                                     <h3 style={{ fontSize: '1.1rem', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         📦 商品明細 <span className="req-badge">必須</span>
                                     </h3>
                                     <div style={{ overflowX: 'auto', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
-                                        <table className="order-table" style={{ margin: 0 }}>
+                                        <table className="order-table" style={{ margin: 0, minWidth: '100%' }}>
                                             <thead style={{ background: '#f8fafc' }}>
                                                 <tr>
                                                     <th style={{ width: '40px', textAlign: 'center' }}>No</th>
-                                                    <th style={{ width: '300px' }}>JANコード / 商品名検索 <span className="req">*</span></th>
-                                                    <th style={{ width: '120px' }}>規格</th>
-                                                    <th style={{ width: '100px', textAlign: 'right' }}>単価(円)</th>
-                                                    <th style={{ width: '80px' }}>数量 <span className="req">*</span></th>
-                                                    <th style={{ width: '100px', textAlign: 'right' }}>小計(円)</th>
-                                                    <th>備考</th>
+                                                    {visibleCols.map(col => (
+                                                        <th key={col.id} style={{ width: col.width ? `${col.width}px` : 'auto', minWidth: col.width ? `${col.width}px` : '100px' }}>
+                                                            {col.label} {col.id === 'jan' || col.id === 'quantity' ? <span className="req">*</span> : ''}
+                                                        </th>
+                                                    ))}
                                                     <th style={{ width: '50px', textAlign: 'center' }}></th>
                                                 </tr>
                                             </thead>
@@ -278,48 +483,16 @@ export default function OrderPage() {
                                                 {orderItems.map((item, index) => (
                                                     <tr key={item.id}>
                                                         <td style={{ textAlign: 'center', background: '#f8fafc', fontWeight: 'bold' }}>{index + 1}</td>
-                                                        <td style={{ position: 'relative', overflow: 'visible' }}>
-                                                            {/* インクリメンタルサーチセル */}
-                                                            <SearchCell
-                                                                item={item}
-                                                                productMaster={productMaster}
-                                                                onSearchChange={(val) => handleSearchKeyChange(item.id, val)}
-                                                                onSelect={(prod) => selectProduct(item.id, prod)}
-                                                                onBlur={() => updateRow(item.id, 'isSearching', false)}
-                                                                onFocus={() => updateRow(item.id, 'isSearching', true)}
-                                                            />
-                                                        </td>
-                                                        <td style={{ background: '#f1f5f9', color: '#64748b' }}>{item.specification}</td>
-                                                        <td style={{ background: '#f1f5f9', color: '#64748b', textAlign: 'right' }}>
-                                                            {item.price > 0 ? item.price.toLocaleString() : ''}
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                className="form-input"
-                                                                value={item.quantity === 0 ? '' : item.quantity}
-                                                                onChange={(e) => updateRow(item.id, 'quantity', e.target.value)}
-                                                                style={{ padding: '6px', textAlign: 'right', border: item.janCode && !item.quantity ? '1px solid var(--danger)' : '' }}
-                                                            />
-                                                        </td>
-                                                        <td style={{ background: '#f1f5f9', fontWeight: 'bold', textAlign: 'right' }}>
-                                                            {(item.price * (parseInt(item.quantity) || 0)).toLocaleString()}
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="text"
-                                                                className="form-input"
-                                                                value={item.remarks}
-                                                                onChange={(e) => updateRow(item.id, 'remarks', e.target.value)}
-                                                                style={{ padding: '6px' }}
-                                                            />
-                                                        </td>
-                                                        <td style={{ textAlign: 'center' }}>
+                                                        {visibleCols.map(col => (
+                                                            <td key={col.id} style={{ background: col.editLocked && col.id !== 'jan' ? '#f1f5f9' : 'transparent', verticalAlign: 'top' }}>
+                                                                {renderDynamicCell(col, item)}
+                                                            </td>
+                                                        ))}
+                                                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                                             <button
                                                                 onClick={() => removeRow(item.id)}
-                                                                className="btn btn-secondary"
-                                                                style={{ padding: '4px 8px', color: 'var(--danger)', background: 'transparent', border: 'none' }}
+                                                                style={{ padding: '4px', color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1 }}
+                                                                title="行を削除"
                                                             >✕</button>
                                                         </td>
                                                     </tr>
@@ -329,25 +502,28 @@ export default function OrderPage() {
                                     </div>
                                     <div style={{ marginTop: '10px' }}>
                                         <button onClick={addRow} className="btn btn-secondary" style={{ fontSize: '0.85rem' }}>+ 行を追加</button>
+                                        {tConf.maxRows && <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>(最大 {tConf.maxRows} 行)</span>}
                                     </div>
 
                                     {/* 自動計算サマリー */}
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-                                        <div style={{ width: '300px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                                <span className="text-muted">小計</span>
-                                                <span>¥{subtotal.toLocaleString()}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                                <span className="text-muted">消費税 (10%)</span>
-                                                <span>¥{tax.toLocaleString()}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--primary-dark)' }}>
-                                                <span>合計金額</span>
-                                                <span>¥{totalAmount.toLocaleString()}</span>
+                                    {tConf.showTotal !== false && (
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                                            <div style={{ width: '300px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                    <span className="text-muted">小計</span>
+                                                    <span>¥{subtotal.toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                    <span className="text-muted">消費税 (10%)</span>
+                                                    <span>¥{tax.toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--primary-dark)' }}>
+                                                    <span>合計金額</span>
+                                                    <span>¥{totalAmount.toLocaleString()}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             );
                         }
@@ -433,108 +609,85 @@ export default function OrderPage() {
                         disabled={isSubmitting}
                         style={{ padding: '12px 40px', fontSize: '1.1rem', boxShadow: '0 4px 6px rgba(13, 148, 136, 0.2)' }}
                     >
-                        {isSubmitting ? '送信中...' : '発注を確定する'}
+                        {isSubmitting ? '送信中...' : '発注書を保存'}
                     </button>
-                    <p className="text-muted mt-sm" style={{ fontSize: '0.85rem' }}>※発注データはシステムを通じて販売店へ共有されます</p>
+                    <p className="text-muted mt-sm" style={{ fontSize: '0.85rem' }}>※保存した発注内容は「いつもの注文」にも登録されます</p>
                 </div>
             </div>
-        </div>
-    );
-}
 
-// ==== インクリメンタルサーチ用カスタムセルコンポーネント ====
-function SearchCell({ item, productMaster, onSearchChange, onSelect, onFocus, onBlur }) {
-    const wrapperRef = useRef(null);
-    const [localValue, setLocalValue] = useState(item.searchKey);
-
-    useEffect(() => {
-        setLocalValue(item.searchKey);
-    }, [item.searchKey]);
-
-    // クリック外判定でドロップダウンを閉じる
-    useOutsideClick(wrapperRef, () => {
-        if (item.isSearching) onBlur();
-    });
-
-    const filtered = item.isSearching && localValue.length > 0
-        ? productMaster.filter(p =>
-            p.salesStatus !== '廃盤' &&
-            (p.janCode.includes(localValue) || p.productName.toLowerCase().includes(localValue.toLowerCase()))
-        ).slice(0, 10) // 最大10件表示
-        : [];
-
-    return (
-        <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
-            <input
-                type="text"
-                className="form-input"
-                placeholder="JANまたは商品名..."
-                value={localValue}
-                onChange={(e) => {
-                    setLocalValue(e.target.value);
-                    if (!item.isSearching) onFocus(); // 強制的に検索状態にする
-                    onSearchChange(e.target.value);
-                }}
-                onFocus={onFocus}
-                style={{
-                    padding: '6px',
-                    width: '100%',
-                    background: item.janCode ? 'transparent' : '#fff',
-                    border: !item.janCode && item.quantity > 0 ? '1px solid var(--danger)' : ''
-                }}
-            />
-
-            {/* 検索ドロップダウン */}
-            {item.isSearching && localValue.length > 0 && (
-                <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    background: 'white',
-                    border: '1px solid var(--primary)',
-                    borderRadius: '4px',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                    zIndex: 1000,
-                    maxHeight: '250px',
-                    overflowY: 'auto',
-                    marginTop: '2px'
-                }}>
-                    {filtered.length > 0 ? (
-                        filtered.map(p => (
-                            <div
-                                key={p.id}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderBottom: '1px solid #f1f5f9',
-                                    cursor: 'pointer',
-                                    fontSize: '0.85rem',
-                                    display: 'flex',
-                                    justifyContent: 'space-between'
-                                }}
-                                onMouseDown={(e) => {
-                                    // onClickより早く発火させるためにonMouseDownを使用（blurによる非表示対策）
-                                    e.preventDefault();
-                                    onSelect(p);
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0fdfa'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                            >
-                                <div>
-                                    <div style={{ color: '#64748b', fontSize: '0.75rem' }}>{p.janCode}</div>
-                                    <div style={{ fontWeight: 'bold' }}>{p.productName}</div>
-                                </div>
-                                <div style={{ textAlign: 'right', color: '#64748b' }}>
-                                    <div>{p.specification}</div>
-                                    <div style={{ color: 'var(--primary)' }}>¥{p.price.toLocaleString()}</div>
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <div style={{ padding: '10px', color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>
-                            該当する商品が見つかりません
+            {/* 商品選択モーダル */}
+            {showProductModal && (
+                <div className="modal-overlay" onClick={() => setShowProductModal(false)}>
+                    <div className="modal product-picker-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2 className="modal-title">商品を選択</h2>
+                            <button className="modal-close" onClick={() => setShowProductModal(false)}>×</button>
                         </div>
-                    )}
+
+                        <div className="product-picker-filters">
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="JANコード"
+                                value={searchJan}
+                                onChange={(e) => setSearchJan(e.target.value)}
+                            />
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="商品名"
+                                value={searchName}
+                                onChange={(e) => setSearchName(e.target.value)}
+                            />
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="メーカー名"
+                                value={searchMaker}
+                                onChange={(e) => setSearchMaker(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="product-picker-results">
+                            <table className="table product-picker-table">
+                                <thead>
+                                    <tr>
+                                        <th>JANコード</th>
+                                        <th>商品名</th>
+                                        <th>規格</th>
+                                        <th>メーカー</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredProducts.map(product => (
+                                        <tr key={product.id}>
+                                            <td title={product.janCode}>
+                                                <span className="product-picker-cell">{product.janCode}</span>
+                                            </td>
+                                            <td title={product.productName}>
+                                                <span className="product-picker-cell">{product.productName}</span>
+                                            </td>
+                                            <td title={product.specification}>
+                                                <span className="product-picker-cell">{product.specification}</span>
+                                            </td>
+                                            <td title={product.makerName}>
+                                                <span className="product-picker-cell">{product.makerName}</span>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    onClick={() => selectProduct(product)}
+                                                    className="btn btn-sm btn-primary product-picker-action"
+                                                >
+                                                    選択
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

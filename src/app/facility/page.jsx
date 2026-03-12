@@ -1,5 +1,22 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
+
+const getRecentOrderTemplates = () => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+        return JSON.parse(localStorage.getItem('orderTemplates') || '[]')
+            .sort((a, b) => {
+                const left = a?.savedAt ? new Date(a.savedAt).getTime() : 0;
+                const right = b?.savedAt ? new Date(b.savedAt).getTime() : 0;
+                return right - left;
+            })
+            .slice(0, 3);
+    } catch {
+        return [];
+    }
+};
 
 export default function FacilityDashboard() {
     const recentOrders = [
@@ -8,10 +25,7 @@ export default function FacilityDashboard() {
         { id: 'ORD-003', date: '2024/01/05', items: 8, status: '送信済' },
     ];
 
-    const templates = [
-        { name: '定期発注A', items: 10 },
-        { name: '月末発注', items: 15 },
-    ];
+    const [templates] = useState(() => getRecentOrderTemplates());
 
     return (
         <div>
@@ -43,18 +57,22 @@ export default function FacilityDashboard() {
                     <p className="text-muted" style={{ marginBottom: 'var(--spacing-md)' }}>
                         登録済みのテンプレートから1クリックで発注
                     </p>
-                    {templates.map((template, index) => (
-                        <div key={index} style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: 'var(--spacing-sm) 0',
-                            borderBottom: index < templates.length - 1 ? '1px solid var(--border-color)' : 'none'
-                        }}>
-                            <span>{template.name} ({template.items}品目)</span>
-                            <button className="btn btn-sm btn-primary">発注</button>
-                        </div>
-                    ))}
+                    {templates.length === 0 ? (
+                        <p className="text-muted" style={{ padding: 'var(--spacing-sm) 0' }}>いつもの注文はありません</p>
+                    ) : (
+                        templates.map((template, index) => (
+                            <div key={index} style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: 'var(--spacing-sm) 0',
+                                borderBottom: index < templates.length - 1 ? '1px solid var(--border-color)' : 'none'
+                            }}>
+                                <span>{template.name} ({template.items?.length || 0}品目)</span>
+                                <Link href={`/facility/order?template=${template.id}`} className="btn btn-sm btn-primary">発注</Link>
+                            </div>
+                        ))
+                    )}
                     <Link href="/facility/templates" className="btn btn-secondary w-full" style={{ marginTop: 'var(--spacing-md)' }}>
                         すべて表示
                     </Link>

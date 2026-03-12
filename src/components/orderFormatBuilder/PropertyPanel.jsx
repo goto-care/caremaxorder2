@@ -1,6 +1,6 @@
 'use client';
 
-export default function PropertyPanel({ activeField, onChange }) {
+export default function PropertyPanel({ activeField, onChange, formatId, onOpenTableConfig }) {
     if (!activeField) {
         return (
             <div className="fb-properties-empty">
@@ -12,6 +12,16 @@ export default function PropertyPanel({ activeField, onChange }) {
     const isFixed = activeField.type === 'product-table';
     const isSpacer = activeField.type === 'spacer';
     const isTextInput = ['text', 'company', 'address', 'phone', 'fax'].includes(activeField.type);
+
+    const openTableConfig = () => {
+        if (!formatId) {
+            alert('先にフォーマットを一度保存してください。');
+            return;
+        }
+        if (onOpenTableConfig) {
+            onOpenTableConfig(activeField.id);
+        }
+    };
 
     return (
         <div className="fb-properties-panel">
@@ -25,6 +35,18 @@ export default function PropertyPanel({ activeField, onChange }) {
                     <div className="prop-group info-group">
                         <p className="text-muted">このパーツは発注書に必須の「商品明細テーブル」です。</p>
                         <p className="text-muted mt-sm">常に全幅（4/4カラム）で表示されます。</p>
+                        <button
+                            className="btn btn-primary"
+                            style={{ marginTop: '12px', width: '100%', fontSize: '0.85rem' }}
+                            onClick={openTableConfig}
+                        >
+                            📋 明細テーブルを詳細設定する
+                        </button>
+                        {!formatId && (
+                            <small className="text-muted" style={{ display: 'block', marginTop: '6px', color: 'var(--danger)' }}>
+                                ※ フォーマットを保存した後に利用できます
+                            </small>
+                        )}
                     </div>
                 ) : isSpacer ? (
                     <>
@@ -58,18 +80,6 @@ export default function PropertyPanel({ activeField, onChange }) {
                                 onChange={(e) => onChange({ ...activeField, label: e.target.value })}
                             />
                         </div>
-
-                        {(isTextInput || activeField.type === 'textarea') && (
-                            <div className="prop-group">
-                                <label>入力ヒント（プレースホルダー）</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={activeField.placeholder || ''}
-                                    onChange={(e) => onChange({ ...activeField, placeholder: e.target.value })}
-                                />
-                            </div>
-                        )}
 
                         {activeField.type === 'select' && (
                             <div className="prop-group">

@@ -17,6 +17,7 @@ import { v4 as uuidv4 } from 'uuid';
 import ToolboxItem, { TOOLBOX_ITEMS } from './ToolboxItem';
 import FormatCanvas from './FormatCanvas';
 import PropertyPanel from './PropertyPanel';
+import TableConfigEditor from '../tableConfigEditor/TableConfigEditor';
 
 const STORAGE_KEY = 'orderFormats';
 
@@ -27,6 +28,40 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
     const [activeFieldId, setActiveFieldId] = useState(null);
     const [savedFormats, setSavedFormats] = useState([]);
     const [editingId, setEditingId] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [future, setFuture] = useState([]);
+    const [tableConfigModalFieldId, setTableConfigModalFieldId] = useState(null);
+
+    const updateFields = useCallback((updater) => {
+        setFields(prev => {
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            setHistory(h => [...h, prev]);
+            setFuture([]); // clear redo stack on new action
+            return next;
+        });
+    }, []);
+
+    const handleUndo = useCallback(() => {
+        if (history.length === 0) return;
+        setHistory(prev => {
+            const next = [...prev];
+            const last = next.pop();
+            setFuture(f => [...f, fields]);
+            setFields(last);
+            return next;
+        });
+    }, [history.length, fields]);
+
+    const handleRedo = useCallback(() => {
+        if (future.length === 0) return;
+        setFuture(prev => {
+            const next = [...prev];
+            const nextState = next.pop();
+            setHistory(h => [...h, fields]);
+            setFields(nextState);
+            return next;
+        });
+    }, [future.length, fields]);
 
     // 読み込み処理
     useEffect(() => {
@@ -35,6 +70,29 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
             setSavedFormats(JSON.parse(saved));
         }
     }, []);
+
+    // BroadcastChannel: listen for table config saves from the separate tab
+    useEffect(() => {
+        let bc;
+        try {
+            bc = new BroadcastChannel('tableConfigChannel');
+            bc.onmessage = (event) => {
+                if (event.data?.type === 'TABLE_CONFIG_SAVED' && event.data.formatId === editingId) {
+                    // Reload fields from localStorage
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (raw) {
+                        const formats = JSON.parse(raw);
+                        const fmt = formats.find(f => f.id === editingId);
+                        if (fmt && fmt.fields) {
+                            setFields(fmt.fields);
+                        }
+                        setSavedFormats(formats);
+                    }
+                }
+            };
+        } catch (e) { /* BroadcastChannel not supported */ }
+        return () => { if (bc) bc.close(); };
+    }, [editingId]);
 
     useEffect(() => {
         if (formatId && savedFormats.length > 0) {
@@ -137,7 +195,7 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                 newField.col = null;
             }
 
-            setFields(prev => {
+            updateFields(prev => {
                 const next = [...prev];
                 if (overField) {
                     const idx = next.findIndex(f => f.id === overField.id);
@@ -153,7 +211,7 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
 
         // キャンバス内の移動
         if (active.id !== over.id) {
-            setFields(prev => {
+            updateFields(prev => {
                 const actIdx = prev.findIndex(f => f.id === active.id);
                 if (actIdx < 0) return prev;
                 const activeField = prev[actIdx];
@@ -181,13 +239,40 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
     // Canvas Item Actions
     const handleSelectField = (id) => setActiveFieldId(id);
     const handleRemoveField = (id) => {
-        setFields(prev => prev.filter(f => f.id !== id));
+        updateFields(prev => prev.filter(f => f.id !== id));
         if (activeFieldId === id) setActiveFieldId(null);
     };
 
-    // Property Panel Actions
+    // Row Actions
+    const handleAddRow = (rowIndex) => {
+        updateFields(prev => {
+            return prev.map(f => {
+                if (f.row >= rowIndex) {
+                    return { ...f, row: f.row + 1 };
+                }
+                return f;
+            });
+        });
+    };
+
+    const handleDeleteRow = (rowIndex) => {
+        if (!confirm(`行${rowIndex}を削除しますか？\n配置されているパーツは一時退避エリアに移動します。`)) return;
+        updateFields(prev => {
+            return prev.map(f => {
+                if (f.row === rowIndex) {
+                    return { ...f, row: null, col: null }; // move to parking
+                }
+                if (f.row > rowIndex) {
+                    return { ...f, row: f.row - 1 }; // shift up
+                }
+                return f;
+            });
+        });
+    };
+
+    // Property Panel / Inline Actions
     const handleUpdateField = (updatedField) => {
-        setFields(prev => prev.map(f => f.id === updatedField.id ? updatedField : f));
+        updateFields(prev => prev.map(f => f.id === updatedField.id ? updatedField : f));
     };
 
     // Global Actions
@@ -219,6 +304,8 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
     const handleNew = () => {
         setFormatName('');
         setFields([]);
+        setHistory([]);
+        setFuture([]);
         setEditingId(null);
         setActiveFieldId(null);
     };
@@ -247,6 +334,8 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                 updatedFields = migrateFieldsToGrid(updatedFields);
             }
             setFields(updatedFields);
+            setHistory([]);
+            setFuture([]);
             setActiveFieldId(null);
         }
     };
@@ -272,6 +361,24 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                     </select>
                 </div>
                 <div className="fb-header-right">
+                    <button
+                        className="btn btn-secondary"
+                        onClick={handleUndo}
+                        disabled={history.length === 0}
+                        style={{ opacity: history.length === 0 ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h10a5 5 0 0 1 5 5v2a5 5 0 0 1-5 5H3m0-12 4-4m-4 4 4 4" /></svg>
+                        一つ戻る
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={handleRedo}
+                        disabled={future.length === 0}
+                        style={{ opacity: future.length === 0 ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                        一つ進む
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10h10a5 5 0 0 0-5 5v2a5 5 0 0 0 5 5h10m0-12-4-4m4 4-4 4" /></svg>
+                    </button>
                     {editingId && (
                         <button className="btn" onClick={handleDelete} style={{ color: 'var(--danger)', background: 'transparent', border: '1px solid var(--danger)' }} title="フォーマット削除">🗑 削除</button>
                     )}
@@ -292,7 +399,7 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                     <div className="fb-pane fb-toolbox-pane">
                         <div className="fb-pane-header">パーツ</div>
                         <div className="fb-pane-body">
-                            {TOOLBOX_ITEMS.map(item => (
+                            {TOOLBOX_ITEMS.map((item) => (
                                 <ToolboxItem
                                     key={item.type}
                                     item={item}
@@ -309,6 +416,9 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                             activeFieldId={activeFieldId}
                             onSelectField={handleSelectField}
                             onRemoveField={handleRemoveField}
+                            onUpdateField={handleUpdateField}
+                            onAddRow={handleAddRow}
+                            onDeleteRow={handleDeleteRow}
                         />
                     </div>
 
@@ -319,6 +429,8 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                             <PropertyPanel
                                 activeField={fields.find(f => f.id === activeFieldId)}
                                 onChange={handleUpdateField}
+                                formatId={editingId}
+                                onOpenTableConfig={(fieldId) => setTableConfigModalFieldId(fieldId)}
                             />
                         </div>
                     </div>
@@ -334,6 +446,32 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                     )}
                 </DragOverlay>
             </DndContext>
+
+            {/* Modal: Table Config Editor */}
+            {tableConfigModalFieldId && (
+                <div className="tc-modal-overlay" onClick={() => setTableConfigModalFieldId(null)}>
+                    <div className="tc-modal-content" onClick={(e) => e.stopPropagation()}>
+                        <button className="tc-modal-close" onClick={() => setTableConfigModalFieldId(null)}>×</button>
+                        <TableConfigEditor
+                            formatId={editingId}
+                            fieldId={tableConfigModalFieldId}
+                            onClose={() => setTableConfigModalFieldId(null)}
+                            onSaved={() => {
+                                // Reload fields from localStorage after save
+                                const raw = localStorage.getItem(STORAGE_KEY);
+                                if (raw) {
+                                    const formats = JSON.parse(raw);
+                                    const fmt = formats.find(f => f.id === editingId);
+                                    if (fmt && fmt.fields) {
+                                        setFields(fmt.fields);
+                                    }
+                                    setSavedFormats(formats);
+                                }
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
