@@ -9,6 +9,7 @@ export default function AdminLayout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [hasUnreadAnnouncements, setHasUnreadAnnouncements] = useState(true);
 
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         const demoUser = localStorage.getItem('demoUser');
         if (demoUser) {
@@ -22,6 +23,7 @@ export default function AdminLayout({ children }) {
             router.push('/');
         }
     }, [router]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleLogout = () => {
         localStorage.removeItem('demoUser');
@@ -48,9 +50,6 @@ export default function AdminLayout({ children }) {
                 <nav className="sidebar-nav">
                     <Link href="/admin" className="nav-item">
                         📊 ダッシュボード
-                    </Link>
-                    <Link href="/admin/products" className="nav-item">
-                        📦 商品マスタ
                     </Link>
                     <Link href="/admin/maker-rules" className="nav-item">
                         ⚙️ メーカー管理

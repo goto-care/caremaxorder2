@@ -4,46 +4,11 @@
  */
 
 const STORAGE_KEYS = {
-    PRODUCTS: 'demo_products',
     MAKER_RULES: 'demo_maker_rules',
     TEMPLATES: 'demo_templates',
-    ORIGINAL_CODE_COUNTER: 'original_code_counter',
     FACILITY_CODE_COUNTER: 'facility_code_counter',
     FACILITIES: 'demo_facilities'
 };
-
-/**
- * オリジナルコードを生成
- * フォーマット: ORG-XXXXX (5桁連番)
- */
-export function generateOriginalCode() {
-    if (typeof window === 'undefined') return 'ORG-00001';
-
-    let counter = parseInt(localStorage.getItem(STORAGE_KEYS.ORIGINAL_CODE_COUNTER) || '0', 10);
-    counter += 1;
-    localStorage.setItem(STORAGE_KEYS.ORIGINAL_CODE_COUNTER, counter.toString());
-
-    return `ORG-${counter.toString().padStart(5, '0')}`;
-}
-
-/**
- * 商品マスタを取得
- */
-export function getProducts() {
-    if (typeof window === 'undefined') return null;
-
-    const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-    return data ? JSON.parse(data) : null;
-}
-
-/**
- * 商品マスタを保存
- */
-export function saveProducts(products) {
-    if (typeof window === 'undefined') return;
-
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-}
 
 /**
  * メーカールールを取得

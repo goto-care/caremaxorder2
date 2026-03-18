@@ -52,18 +52,3 @@ export const checkOrderStatus = async (orderId) => {
     });
 };
 
-/**
- * 商品マスタを取得（モック - 管理者API）
- * @returns {array} 商品リスト
- */
-export const fetchProductMaster = async () => {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve({
-                success: true,
-                products: [],
-                lastUpdated: new Date().toISOString(),
-            });
-        }, MOCK_API_DELAY);
-    });
-};

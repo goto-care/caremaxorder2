@@ -9,26 +9,29 @@ import {
     DragOverlay,
 } from '@dnd-kit/core';
 import {
-    SortableContext,
-    horizontalListSortingStrategy,
     arrayMove,
 } from '@dnd-kit/sortable';
 import { v4 as uuidv4 } from 'uuid';
 import TablePreview from './TablePreview';
 import TableColumnPanel from './TableColumnPanel';
+import {
+    normalizeProductTableColumns,
+    sanitizeProductTableColumn,
+    sanitizeProductTableConfig,
+} from '@/lib/productTableConfig';
 
 const STORAGE_KEY = 'orderFormats';
 const BROADCAST_CHANNEL = 'tableConfigChannel';
 
 /* ─── Default standard columns ─── */
 export const DEFAULT_COLUMNS = [
-    { id: 'jan', label: 'JAN/商品コード', type: 'text', locked: true, visible: true, width: 140, editLocked: true },
-    { id: 'name', label: '商品名', type: 'text', locked: true, visible: true, width: 200, editLocked: true },
-    { id: 'spec', label: '規格', type: 'text', locked: false, visible: true, width: 100, editLocked: true },
-    { id: 'quantity', label: '数量', type: 'number', locked: true, visible: true, width: 80, editLocked: false },
-    { id: 'unit', label: '単位', type: 'text', locked: false, visible: true, width: 60, editLocked: true },
-    { id: 'unitPrice', label: '単価', type: 'number', locked: false, visible: true, width: 100, editLocked: true },
-    { id: 'subtotal', label: '小計', type: 'computed', locked: false, visible: true, width: 100, editLocked: true },
+    { id: 'jan', label: 'JAN/商品コード', type: 'text', locked: true, visible: true, width: 140 },
+    { id: 'name', label: '商品名', type: 'text', locked: true, visible: true, width: 200 },
+    { id: 'spec', label: '規格', type: 'text', locked: false, visible: true, width: 100 },
+    { id: 'quantity', label: '数量', type: 'number', locked: true, visible: true, width: 80 },
+    { id: 'unit', label: '単位', type: 'text', locked: false, visible: true, width: 60 },
+    { id: 'unitPrice', label: '単価', type: 'number', locked: false, visible: true, width: 100 },
+    { id: 'subtotal', label: '小計', type: 'computed', locked: false, visible: true, width: 100 },
 ];
 
 const DEFAULT_TABLE_CONFIG = {
@@ -36,6 +39,7 @@ const DEFAULT_TABLE_CONFIG = {
     showTotal: true,
     initialRows: 5,
     maxRows: null,
+    recordRowCount: 2,
 };
 
 /* Column type options */
@@ -46,6 +50,14 @@ export const COLUMN_TYPES = [
     { value: 'select', label: 'ドロップダウン' },
     { value: 'date', label: '日付' },
 ];
+
+function sanitizeTableConfig(config) {
+    return sanitizeProductTableConfig(config || DEFAULT_TABLE_CONFIG);
+}
+
+function clampRecordRowCount(value) {
+    return Math.min(3, Math.max(2, parseInt(value, 10) || 2));
+}
 
 export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved }) {
     const [tableConfig, setTableConfig] = useState(null);
@@ -59,6 +71,7 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
     );
 
     /* ─── Load config from localStorage ─── */
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (!formatId || !fieldId) return;
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -70,8 +83,10 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
         const field = (fmt.fields || []).find(f => f.id === fieldId);
         if (!field) return;
         // Use existing config or create default
-        setTableConfig(field.tableConfig ? JSON.parse(JSON.stringify(field.tableConfig)) : JSON.parse(JSON.stringify(DEFAULT_TABLE_CONFIG)));
+        const initialConfig = field.tableConfig ? JSON.parse(JSON.stringify(field.tableConfig)) : JSON.parse(JSON.stringify(DEFAULT_TABLE_CONFIG));
+        setTableConfig(sanitizeTableConfig(initialConfig));
     }, [formatId, fieldId]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     /* ─── Save ─── */
     const handleSave = useCallback(() => {
@@ -84,7 +99,7 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
         const fieldIdx = formats[fmtIdx].fields.findIndex(f => f.id === fieldId);
         if (fieldIdx === -1) return;
 
-        formats[fmtIdx].fields[fieldIdx].tableConfig = JSON.parse(JSON.stringify(tableConfig));
+        formats[fmtIdx].fields[fieldIdx].tableConfig = JSON.parse(JSON.stringify(sanitizeTableConfig(tableConfig)));
         formats[fmtIdx].updatedAt = new Date().toISOString();
         localStorage.setItem(STORAGE_KEY, JSON.stringify(formats));
 
@@ -100,7 +115,7 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
 
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
-    }, [formatId, fieldId, tableConfig]);
+    }, [fieldId, formatId, onSaved, tableConfig]);
 
     /* ─── Column CRUD ─── */
     const updateConfig = useCallback((updater) => {
@@ -111,20 +126,26 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
     }, []);
 
     const addColumn = useCallback((type = 'text') => {
-        const newCol = {
-            id: uuidv4(),
-            label: '新しい列',
-            type,
-            locked: false,
-            visible: true,
-            width: 120,
-            editLocked: false,
-        };
-        updateConfig(prev => ({
-            ...prev,
-            columns: [...prev.columns, newCol],
-        }));
-        setActiveColumnId(newCol.id);
+        const columnId = uuidv4();
+
+        updateConfig(prev => {
+            const newCol = sanitizeProductTableColumn({
+                id: columnId,
+                label: '新しい列',
+                type,
+                locked: false,
+                visible: true,
+                width: 120,
+                rowIndex: Math.min(2, clampRecordRowCount(prev.recordRowCount)),
+            });
+
+            return {
+                ...prev,
+                columns: [...prev.columns, newCol],
+            };
+        });
+
+        setActiveColumnId(columnId);
     }, [updateConfig]);
 
     const removeColumn = useCallback((colId) => {
@@ -136,16 +157,30 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
     }, [updateConfig, activeColumnId]);
 
     const updateColumn = useCallback((updatedCol) => {
-        updateConfig(prev => ({
-            ...prev,
-            columns: prev.columns.map(c => c.id === updatedCol.id ? updatedCol : c),
-        }));
+        updateConfig(prev => {
+            const [nextColumn] = normalizeProductTableColumns([updatedCol], prev.recordRowCount);
+
+            return {
+                ...prev,
+                columns: prev.columns.map(c => (c.id === updatedCol.id ? nextColumn : c)),
+            };
+        });
     }, [updateConfig]);
 
     const handleColumnResize = useCallback((colId, newWidth) => {
         updateConfig(prev => ({
             ...prev,
             columns: prev.columns.map(c => c.id === colId ? { ...c, width: Math.max(40, newWidth) } : c),
+        }));
+    }, [updateConfig]);
+
+    const handleRecordRowCountChange = useCallback((value) => {
+        const nextRecordRowCount = clampRecordRowCount(value);
+
+        updateConfig(prev => ({
+            ...prev,
+            recordRowCount: nextRecordRowCount,
+            columns: normalizeProductTableColumns(prev.columns, nextRecordRowCount),
         }));
     }, [updateConfig]);
 
@@ -158,8 +193,32 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
         if (!over || active.id === over.id) return;
         updateConfig(prev => {
             const oldIdx = prev.columns.findIndex(c => c.id === active.id);
+            const overType = over.data.current?.type;
+
+            if (overType === 'row-drop') {
+                const targetRowIndex = over.data.current?.rowIndex || 1;
+                return {
+                    ...prev,
+                    columns: prev.columns.map((column) => (
+                        column.id === active.id
+                            ? { ...column, rowIndex: targetRowIndex }
+                            : column
+                    )),
+                };
+            }
+
             const newIdx = prev.columns.findIndex(c => c.id === over.id);
-            return { ...prev, columns: arrayMove(prev.columns, oldIdx, newIdx) };
+            const overColumn = prev.columns[newIdx];
+            const nextColumns = arrayMove(prev.columns, oldIdx, newIdx).map((column) => {
+                if (column.id !== active.id || !overColumn) return column;
+
+                return {
+                    ...column,
+                    rowIndex: overColumn.rowIndex || column.rowIndex || 1,
+                };
+            });
+
+            return { ...prev, columns: nextColumns };
         });
     };
 
@@ -216,6 +275,7 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
                             columns={tableConfig.columns}
                             initialRows={tableConfig.initialRows}
                             showTotal={tableConfig.showTotal}
+                            recordRowCount={tableConfig.recordRowCount}
                             activeColumnId={activeColumnId}
                             onSelectColumn={setActiveColumnId}
                             onColumnResize={handleColumnResize}
@@ -235,6 +295,17 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
                                         value={tableConfig.initialRows}
                                         onChange={(e) => updateConfig(prev => ({ ...prev, initialRows: Math.max(1, parseInt(e.target.value) || 1) }))}
                                     />
+                                </div>
+                                <div className="tc-setting-item">
+                                    <label>1レコードの表示段数</label>
+                                    <select
+                                        className="form-input"
+                                        value={tableConfig.recordRowCount || 2}
+                                        onChange={(e) => handleRecordRowCountChange(e.target.value)}
+                                    >
+                                        <option value={2}>2段</option>
+                                        <option value={3}>3段</option>
+                                    </select>
                                 </div>
                                 <div className="tc-setting-item">
                                     <label>
@@ -278,6 +349,7 @@ export default function TableConfigEditor({ formatId, fieldId, onClose, onSaved 
                             onRemove={removeColumn}
                             onAddColumn={addColumn}
                             allColumns={tableConfig.columns}
+                            recordRowCount={tableConfig.recordRowCount}
                         />
                     </div>
                 </div>

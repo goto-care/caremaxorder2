@@ -44,8 +44,10 @@ function PlacedField({ field, isActive, onSelect, onRemove, onUpdateField }) {
     const isFixed = field.type === 'product-table';
     const isSpacer = field.type === 'spacer';
     const span = isFixed ? 4 : (field.colSpan || 4);
-    const isTextInput = ['text', 'company', 'phone', 'fax'].includes(field.type);
-    const isTextArea = ['textarea', 'address'].includes(field.type);
+    const supportsMultilineText = ['text', 'company', 'address', 'phone', 'fax'].includes(field.type);
+    const isTextArea = field.type === 'textarea' || field.multiline || field.type === 'address';
+    const isTextInput = supportsMultilineText && !isTextArea;
+    const previewRows = field.rows || (field.type === 'address' ? 4 : 3);
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -85,7 +87,20 @@ function PlacedField({ field, isActive, onSelect, onRemove, onUpdateField }) {
                 </label>
                 <div className="item-preview" style={{ marginTop: '4px' }}>
                     {isTextInput && <input type="text" className="form-input preview-input" defaultValue="" readOnly style={{ fontSize: '0.75rem', padding: '3px 6px' }} />}
-                    {isTextArea && <textarea className="form-input preview-input" rows="2" defaultValue="" readOnly style={{ fontSize: '0.75rem', padding: '3px 6px', resize: 'vertical' }} />}
+                    {isTextArea && (
+                        <textarea
+                            className="form-input preview-input"
+                            rows={previewRows}
+                            defaultValue=""
+                            readOnly
+                            style={{
+                                fontSize: '0.75rem',
+                                padding: '3px 6px',
+                                resize: 'vertical',
+                                textAlign: field.textAlign || 'left',
+                            }}
+                        />
+                    )}
                     {field.type === 'date' && <input type="date" className="form-input preview-input" defaultValue="" readOnly style={{ fontSize: '0.75rem', padding: '3px 6px' }} />}
                     {field.type === 'select' && (
                         <select className="form-input preview-input" disabled style={{ fontSize: '0.75rem', padding: '3px 6px' }}>

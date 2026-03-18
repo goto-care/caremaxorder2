@@ -177,6 +177,9 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                 required: type === 'product-table',
                 placeholder: '',
                 options: type === 'select' ? ['オプション1', 'オプション2'] : [],
+                multiline: type === 'textarea' || type === 'address',
+                rows: type === 'address' ? 4 : 3,
+                textAlign: 'left',
                 colSpan: type === 'spacer' ? 1 : 4,
                 row: null,
                 col: null,
@@ -234,7 +237,7 @@ export default function OrderFormatBuilder({ formatId, onSaved }) {
                 return next;
             });
         }
-    }, [fields, hasProductTable]);
+    }, [fields, hasProductTable, updateFields]);
 
     // Canvas Item Actions
     const handleSelectField = (id) => setActiveFieldId(id);

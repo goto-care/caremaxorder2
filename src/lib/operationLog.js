@@ -5,7 +5,7 @@ import { db } from './firebase';
 /**
  * 操作ログを記録
  * @param {string} userId - 操作したユーザーID
- * @param {string} action - 操作内容（例: UPDATE_QUANTITY, CREATE_ORDER, DELETE_PRODUCT）
+ * @param {string} action - 操作内容（例: UPDATE_QUANTITY, CREATE_ORDER, DELETE_TEMPLATE）
  * @param {object} details - 詳細情報
  */
 export const logOperation = async (userId, action, details) => {
@@ -28,12 +28,6 @@ export const ACTIONS = {
     UPDATE_ORDER: 'UPDATE_ORDER',
     CONFIRM_ORDER: 'CONFIRM_ORDER',
     CANCEL_ORDER: 'CANCEL_ORDER',
-
-    // 商品関連
-    CREATE_PRODUCT: 'CREATE_PRODUCT',
-    UPDATE_PRODUCT: 'UPDATE_PRODUCT',
-    DELETE_PRODUCT: 'DELETE_PRODUCT',
-    IMPORT_PRODUCTS: 'IMPORT_PRODUCTS',
 
     // 数量変更
     UPDATE_QUANTITY: 'UPDATE_QUANTITY',

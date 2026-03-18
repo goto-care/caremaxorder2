@@ -2,7 +2,6 @@
 import { useDraggable } from '@dnd-kit/core';
 
 export const TOOLBOX_ITEMS = [
-    { type: 'text', icon: '📝', label: '１行テキスト' },
     { type: 'textarea', icon: '📄', label: '複数行テキスト' },
     { type: 'date', icon: '📅', label: '日付' },
     { type: 'select', icon: '▼', label: 'ドロップダウン' },

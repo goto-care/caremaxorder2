@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 const getStoredOrderTemplates = () => {
@@ -21,12 +21,28 @@ const sortTemplatesBySavedAt = (templates) => [...templates].sort((a, b) => {
 export default function FacilityTemplatesPage() {
     const [templates, setTemplates] = useState(() => sortTemplatesBySavedAt(getStoredOrderTemplates()));
 
+    useEffect(() => {
+        const syncTemplates = () => {
+            setTemplates(sortTemplatesBySavedAt(getStoredOrderTemplates()));
+        };
+
+        syncTemplates();
+        window.addEventListener('orderTemplatesUpdated', syncTemplates);
+        window.addEventListener('focus', syncTemplates);
+
+        return () => {
+            window.removeEventListener('orderTemplatesUpdated', syncTemplates);
+            window.removeEventListener('focus', syncTemplates);
+        };
+    }, []);
+
     const handleDelete = (id) => {
         if (!confirm('このいつもの注文を削除してもよろしいですか？')) return;
 
         const updated = templates.filter(template => template.id !== id);
         setTemplates(updated);
         localStorage.setItem('orderTemplates', JSON.stringify(updated));
+        window.dispatchEvent(new Event('orderTemplatesUpdated'));
     };
 
     return (
@@ -69,7 +85,7 @@ export default function FacilityTemplatesPage() {
                                         <td>{template.items?.length || 0}品目</td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '8px' }}>
-                                                <Link href={`/facility/order?template=${template.id}`} className="btn btn-sm btn-primary">
+                                                <Link href={`/facility/order/confirm?template=${template.id}`} className="btn btn-sm btn-primary">
                                                     発注する
                                                 </Link>
                                                 <button onClick={() => handleDelete(template.id)} className="btn btn-sm btn-danger">

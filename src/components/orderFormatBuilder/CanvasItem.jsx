@@ -59,8 +59,10 @@ export default function CanvasItem({ field, isActive, onSelect, onRemove }) {
         );
     }
 
-    // Text-like input types
-    const isTextInput = ['text', 'company', 'address', 'phone', 'fax'].includes(field.type);
+    const supportsMultilineText = ['text', 'company', 'address', 'phone', 'fax'].includes(field.type);
+    const isTextArea = field.type === 'textarea' || field.multiline || field.type === 'address';
+    const isTextInput = supportsMultilineText && !isTextArea;
+    const previewRows = field.rows || (field.type === 'address' ? 4 : 3);
 
     return (
         <div
@@ -96,8 +98,14 @@ export default function CanvasItem({ field, isActive, onSelect, onRemove }) {
                     {isTextInput && (
                         <input type="text" className="form-input preview-input" placeholder={field.placeholder || 'テキスト入力'} readOnly />
                     )}
-                    {field.type === 'textarea' && (
-                        <textarea className="form-input preview-input" rows="2" placeholder={field.placeholder || '複数行テキスト'} readOnly />
+                    {isTextArea && (
+                        <textarea
+                            className="form-input preview-input"
+                            rows={previewRows}
+                            placeholder={field.placeholder || '複数行テキスト'}
+                            readOnly
+                            style={{ textAlign: field.textAlign || 'left' }}
+                        />
                     )}
                     {field.type === 'date' && (
                         <input type="date" className="form-input preview-input" readOnly />

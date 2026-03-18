@@ -2,12 +2,12 @@
 import { useState } from 'react';
 
 export default function OperationLogs() {
-    const [logs, setLogs] = useState([
+    const [logs] = useState([
         { id: '1', userId: 'user-001', userName: 'サンプル病院A', action: 'CREATE_ORDER', details: '発注書作成 ORD-2024-001', timestamp: '2024/01/15 14:30:25' },
         { id: '2', userId: 'user-001', userName: 'サンプル病院A', action: 'UPDATE_QUANTITY', details: '商品A: 5ケース → 10ケース', timestamp: '2024/01/15 14:28:10' },
-        { id: '3', userId: 'admin', userName: '管理者', action: 'CREATE_PRODUCT', details: '商品マスタ追加: サンプル商品D', timestamp: '2024/01/15 10:15:00' },
+        { id: '3', userId: 'admin', userName: '管理者', action: 'UPDATE_TEMPLATE', details: '発注フォーマット更新: 定期補充', timestamp: '2024/01/15 10:15:00' },
         { id: '4', userId: 'user-002', userName: '介護施設B', action: 'CONFIRM_ORDER', details: '発注確定 ORD-2024-002', timestamp: '2024/01/14 09:20:45' },
-        { id: '5', userId: 'admin', userName: '管理者', action: 'IMPORT_PRODUCTS', details: 'CSVインポート: 15件', timestamp: '2024/01/14 08:30:00' },
+        { id: '5', userId: 'admin', userName: '管理者', action: 'CREATE_USER', details: '施設ユーザー作成: care@example.jp', timestamp: '2024/01/14 08:30:00' },
         { id: '6', userId: 'user-003', userName: 'クリニックC', action: 'CREATE_TEMPLATE', details: 'テンプレート作成: 定期発注', timestamp: '2024/01/13 17:00:30' },
     ]);
 
@@ -23,10 +23,6 @@ export default function OperationLogs() {
         UPDATE_ORDER: { label: '発注更新', color: 'badge-primary' },
         CONFIRM_ORDER: { label: '発注確定', color: 'badge-success' },
         CANCEL_ORDER: { label: '発注取消', color: 'badge-danger' },
-        CREATE_PRODUCT: { label: '商品追加', color: 'badge-primary' },
-        UPDATE_PRODUCT: { label: '商品更新', color: 'badge-warning' },
-        DELETE_PRODUCT: { label: '商品削除', color: 'badge-danger' },
-        IMPORT_PRODUCTS: { label: 'CSVインポート', color: 'badge-primary' },
         UPDATE_QUANTITY: { label: '数量変更', color: 'badge-warning' },
         CREATE_USER: { label: 'ユーザー作成', color: 'badge-primary' },
         UPDATE_USER: { label: 'ユーザー更新', color: 'badge-warning' },
@@ -82,12 +78,6 @@ export default function OperationLogs() {
                                 <option value="UPDATE_ORDER">発注更新</option>
                                 <option value="CONFIRM_ORDER">発注確定</option>
                                 <option value="CANCEL_ORDER">発注取消</option>
-                            </optgroup>
-                            <optgroup label="商品関連">
-                                <option value="CREATE_PRODUCT">商品追加</option>
-                                <option value="UPDATE_PRODUCT">商品更新</option>
-                                <option value="DELETE_PRODUCT">商品削除</option>
-                                <option value="IMPORT_PRODUCTS">CSVインポート</option>
                             </optgroup>
                             <optgroup label="その他">
                                 <option value="UPDATE_QUANTITY">数量変更</option>

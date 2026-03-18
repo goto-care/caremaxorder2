@@ -4,16 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { getProducts, saveProducts, getFacilities } from '@/utils/storageUtils';
+import { getFacilities } from '@/utils/storageUtils';
 
-// 初期サンプル商品（storageに何もない場合のフォールバック）
-const initialProducts = [
-    { id: '1', janCode: '4901234567890', productName: 'サンプル商品A', specification: '100ml×10本', caseQuantity: 10, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
-    { id: '2', janCode: '4901234567891', productName: 'サンプル商品B', specification: '50g×20個', caseQuantity: 20, makerId: 'M002', makerName: 'メーカーB', salesStatus: '' },
-    { id: '3', janCode: '4901234567892', productName: 'サンプル商品C', specification: '200ml×5本', caseQuantity: 5, makerId: 'M001', makerName: 'メーカーA', salesStatus: '廃盤' },
-    { id: '4', janCode: '4901234567893', productName: 'サンプル商品D', specification: '150g×12個', caseQuantity: 12, makerId: 'M003', makerName: 'メーカーC', salesStatus: '' },
-    { id: '5', janCode: '4901234567894', productName: 'サンプル商品E', specification: '250ml×8本', caseQuantity: 8, makerId: 'M001', makerName: 'メーカーA', salesStatus: '' },
-];
+const createOrderNumber = () => `ORD-${Date.now().toString().slice(-8)}`;
 
 export default function DistributorOrderPage() {
     const { user } = useAuth();
@@ -22,31 +15,21 @@ export default function DistributorOrderPage() {
     const [facilityList, setFacilityList] = useState([]);
     const [selectedFacility, setSelectedFacility] = useState(null);
 
-    // 商品マスタ（共有ストレージから読み込み）
-    const [productMaster, setProductMaster] = useState([]);
-
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
-        // 商品マスタ読み込み
-        const savedProducts = getProducts();
-        if (savedProducts && savedProducts.length > 0) {
-            setProductMaster(savedProducts);
-        } else {
-            setProductMaster(initialProducts);
-            saveProducts(initialProducts);
-        }
-        // 施設一覧読み込み
         const savedFacilities = getFacilities();
         if (savedFacilities && savedFacilities.length > 0) {
             setFacilityList(savedFacilities.filter(f => f.status === 'active'));
         }
     }, []);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // メーカールール
-    const [makerRules, setMakerRules] = useState([
+    const makerRules = [
         { makerId: 'M001', makerName: 'メーカーA', minimumCases: 5, alertMessage: 'メーカーAの商品は5ケース以上でないと発注できません' },
         { makerId: 'M002', makerName: 'メーカーB', minimumCases: 3, alertMessage: 'メーカーBの商品は3ケース以上でないと発注できません' },
         { makerId: 'M003', makerName: 'メーカーC', minimumCases: 10, alertMessage: 'メーカーCの商品は10ケース以上でないと発注できません' },
-    ]);
+    ];
 
     // 発注書のデータ
     const [orderItems, setOrderItems] = useState([
@@ -98,13 +81,11 @@ export default function DistributorOrderPage() {
     const [lastOrderContent, setLastOrderContent] = useState(null);
 
     // モーダル制御
-    const [showProductModal, setShowProductModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-    const [currentRowId, setCurrentRowId] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
     const [validationErrors, setValidationErrors] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [orderNumber, setOrderNumber] = useState(() => createOrderNumber());
 
     // 行追加
     const addRow = () => {
@@ -131,33 +112,10 @@ export default function DistributorOrderPage() {
         }
     };
 
-    // 商品選択モーダルを開く
-    const openProductModal = (rowId) => {
-        setCurrentRowId(rowId);
-        setSearchTerm('');
-        setShowProductModal(true);
-    };
-
-    // 商品を選択
-    const selectProduct = (product) => {
-        if (product.salesStatus === '廃盤') {
-            alert('この商品は廃盤のため発注できません。');
-            return;
-        }
+    const updateItemField = (id, field, value) => {
         setOrderItems(orderItems.map(item =>
-            item.id === currentRowId
-                ? {
-                    ...item,
-                    janCode: product.janCode,
-                    productName: product.productName,
-                    specification: product.specification,
-                    caseQuantity: product.caseQuantity,
-                    makerId: product.makerId,
-                    salesStatus: product.salesStatus || ''
-                }
-                : item
+            item.id === id ? { ...item, [field]: value } : item
         ));
-        setShowProductModal(false);
     };
 
     // 数量変更
@@ -211,6 +169,7 @@ export default function DistributorOrderPage() {
         // メーカーごとにケース数を集計
         const makerTotals = {};
         validItems.forEach(item => {
+            if (!item.makerId) return;
             if (!makerTotals[item.makerId]) {
                 makerTotals[item.makerId] = 0;
             }
@@ -258,7 +217,7 @@ export default function DistributorOrderPage() {
     };
 
     // 発注実行
-    const confirmOrder = async (force = false) => {
+    const confirmOrder = async () => {
         setShowConfirmModal(false);
         setShowDuplicateWarning(false);
         setIsSubmitting(true);
@@ -299,6 +258,7 @@ export default function DistributorOrderPage() {
 
             setOrderItems([{ id: uuidv4(), janCode: '', productName: '', specification: '', caseQuantity: 0, quantity: 0, remarks: '' }]);
             setDeliveryAddresses(['']);
+            setOrderNumber(createOrderNumber());
 
         } catch (error) {
             console.error("Order submission error: ", error);
@@ -326,15 +286,6 @@ export default function DistributorOrderPage() {
             alert('テンプレートを保存しました');
         }
     };
-
-    // 検索フィルタ（廃盤商品は除外）
-    const filteredProducts = productMaster.filter(p =>
-        p.salesStatus !== '廃盤' && (
-            p.productName.includes(searchTerm) ||
-            p.janCode.includes(searchTerm) ||
-            (p.makerName && p.makerName.includes(searchTerm))
-        )
-    );
 
     return (
         <div>
@@ -415,7 +366,7 @@ export default function DistributorOrderPage() {
                         </div>
                         <div style={{ textAlign: 'right' }}>
                             <p className="text-muted" style={{ fontSize: '0.875rem' }}>
-                                発注番号: ORD-{Date.now().toString().slice(-8)}
+                                発注番号: {orderNumber}
                             </p>
                         </div>
                     </div>
@@ -465,59 +416,54 @@ export default function DistributorOrderPage() {
                         </thead>
                         <tbody>
                             {orderItems.map((item, index) => {
-                                const isDiscontinued = item.salesStatus === '廃盤';
-                                const rowStyle = isDiscontinued ? {
-                                    backgroundColor: '#f3f4f6',
-                                    opacity: 0.6,
-                                    position: 'relative'
-                                } : {};
-
                                 return (
-                                    <tr key={item.id} style={rowStyle}>
+                                    <tr key={item.id}>
                                         <td style={{ textAlign: 'center', background: '#f3f4f6' }}>
                                             {index + 1}
-                                            {isDiscontinued && (
-                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#ef4444' }}>廃盤</span>
-                                            )}
                                         </td>
                                         <td>
                                             <input
                                                 type="text"
                                                 value={item.janCode}
-                                                readOnly
-                                                placeholder="選択..."
-                                                onClick={() => !isDiscontinued && openProductModal(item.id)}
-                                                style={{
-                                                    cursor: isDiscontinued ? 'not-allowed' : 'pointer',
-                                                    background: item.janCode ? (isDiscontinued ? '#e5e7eb' : 'white') : '#fef3c7',
-                                                    textDecoration: isDiscontinued ? 'line-through' : 'none'
-                                                }}
+                                                onChange={(e) => updateItemField(item.id, 'janCode', e.target.value)}
+                                                placeholder="JANコード"
+                                                style={{ background: item.janCode ? 'white' : '#fef3c7' }}
                                             />
                                         </td>
                                         <td>
                                             <input
                                                 type="text"
                                                 value={item.productName}
-                                                readOnly
-                                                placeholder="商品を選択してください"
-                                                onClick={() => !isDiscontinued && openProductModal(item.id)}
-                                                style={{
-                                                    cursor: isDiscontinued ? 'not-allowed' : 'pointer',
-                                                    textDecoration: isDiscontinued ? 'line-through' : 'none'
-                                                }}
+                                                onChange={(e) => updateItemField(item.id, 'productName', e.target.value)}
+                                                placeholder="商品名"
                                             />
                                         </td>
-                                        <td><input type="text" value={item.specification} readOnly style={isDiscontinued ? { textDecoration: 'line-through' } : {}} /></td>
-                                        <td style={{ textAlign: 'center' }}>{item.caseQuantity || '-'}</td>
+                                        <td>
+                                            <input
+                                                type="text"
+                                                value={item.specification}
+                                                onChange={(e) => updateItemField(item.id, 'specification', e.target.value)}
+                                                placeholder="規格"
+                                            />
+                                        </td>
                                         <td>
                                             <input
                                                 type="number"
-                                                value={item.quantity || ''}
+                                                value={item.caseQuantity || ''}
+                                                onChange={(e) => updateItemField(item.id, 'caseQuantity', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                                                min="0"
+                                                placeholder="0"
+                                                style={{ textAlign: 'center' }}
+                                            />
+                                        </td>
+                                        <td>
+                                            <input
+                                                type="number"
+                                                value={item.quantity ?? 0}
                                                 onChange={(e) => updateQuantity(item.id, e.target.value)}
                                                 min="0"
                                                 placeholder="0"
-                                                style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                                disabled={isDiscontinued}
+                                                style={{ textAlign: 'center' }}
                                             />
                                         </td>
                                         {customColumns.map(col => (
@@ -527,8 +473,7 @@ export default function DistributorOrderPage() {
                                                     value={item.customValues?.[col.id] || ''}
                                                     onChange={(e) => updateCustomValue(item.id, col.id, e.target.value)}
                                                     placeholder="-"
-                                                    style={{ textAlign: 'center', background: isDiscontinued ? '#e5e7eb' : 'white' }}
-                                                    disabled={isDiscontinued}
+                                                    style={{ textAlign: 'center' }}
                                                 />
                                             </td>
                                         ))}
@@ -538,8 +483,6 @@ export default function DistributorOrderPage() {
                                                 value={item.remarks}
                                                 onChange={(e) => updateRemarks(item.id, e.target.value)}
                                                 placeholder="備考"
-                                                disabled={isDiscontinued}
-                                                style={{ background: isDiscontinued ? '#e5e7eb' : 'white' }}
                                             />
                                         </td>
                                         <td style={{ textAlign: 'center' }}>
@@ -623,68 +566,6 @@ export default function DistributorOrderPage() {
                 </button>
             </div>
 
-            {/* 商品選択モーダル */}
-            {showProductModal && (
-                <div className="modal-overlay" onClick={() => setShowProductModal(false)}>
-                    <div className="modal product-picker-modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h2 className="modal-title">商品を選択</h2>
-                            <button className="modal-close" onClick={() => setShowProductModal(false)}>×</button>
-                        </div>
-
-                        <div className="product-picker-filters product-picker-filters-single">
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="商品名、JANコード、メーカー名で検索..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="product-picker-results">
-                            <table className="table product-picker-table">
-                                <thead>
-                                    <tr>
-                                        <th>JANコード</th>
-                                        <th>商品名</th>
-                                        <th>規格</th>
-                                        <th>メーカー</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredProducts.map(product => (
-                                        <tr key={product.id}>
-                                            <td title={product.janCode}>
-                                                <span className="product-picker-cell">{product.janCode}</span>
-                                            </td>
-                                            <td title={product.productName}>
-                                                <span className="product-picker-cell">{product.productName}</span>
-                                            </td>
-                                            <td title={product.specification}>
-                                                <span className="product-picker-cell">{product.specification}</span>
-                                            </td>
-                                            <td title={product.makerName}>
-                                                <span className="product-picker-cell">{product.makerName}</span>
-                                            </td>
-                                            <td>
-                                                <button
-                                                    onClick={() => selectProduct(product)}
-                                                    className="btn btn-sm btn-primary product-picker-action"
-                                                >
-                                                    選択
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* 確認モーダル */}
             {showConfirmModal && (
                 <div className="modal-overlay">
@@ -724,7 +605,7 @@ export default function DistributorOrderPage() {
                         <p>それでも発注を続けますか？</p>
                         <div className="modal-footer">
                             <button onClick={() => setShowDuplicateWarning(false)} className="btn btn-secondary">キャンセル</button>
-                            <button onClick={() => confirmOrder(true)} className="btn btn-warning">続行する</button>
+                            <button onClick={() => confirmOrder()} className="btn btn-warning">続行する</button>
                         </div>
                     </div>
                 </div>

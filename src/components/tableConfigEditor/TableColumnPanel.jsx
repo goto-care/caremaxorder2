@@ -1,7 +1,7 @@
 'use client';
 import { COLUMN_TYPES } from './TableConfigEditor';
 
-export default function TableColumnPanel({ column, onUpdate, onRemove, onAddColumn, allColumns }) {
+export default function TableColumnPanel({ column, onUpdate, onRemove, onAddColumn, allColumns, recordRowCount = 2 }) {
     if (!column) {
         return (
             <div className="tc-panel">
@@ -47,6 +47,7 @@ export default function TableColumnPanel({ column, onUpdate, onRemove, onAddColu
     }
 
     const isStandardLocked = column.locked;
+    const rowOptions = Array.from({ length: Math.max(2, Math.min(3, recordRowCount)) }, (_, index) => index + 1);
 
     return (
         <div className="tc-panel">
@@ -96,6 +97,20 @@ export default function TableColumnPanel({ column, onUpdate, onRemove, onAddColu
                     <small className="text-muted">テーブル上で列の境界線をドラッグしても調整できます。</small>
                 </div>
 
+                <div className="tc-prop-group">
+                    <label>表示段</label>
+                    <select
+                        className="form-input"
+                        value={column.rowIndex || 1}
+                        onChange={(e) => onUpdate({ ...column, rowIndex: parseInt(e.target.value, 10) || 1 })}
+                    >
+                        {rowOptions.map((rowIndex) => (
+                            <option key={rowIndex} value={rowIndex}>{`${rowIndex}段目`}</option>
+                        ))}
+                    </select>
+                    <small className="text-muted">同じ段の列は左右に並び、別の段は下に積みます。</small>
+                </div>
+
                 {/* Visible toggle */}
                 {!isStandardLocked && (
                     <div className="tc-prop-group tc-checkbox-group">
@@ -109,19 +124,6 @@ export default function TableColumnPanel({ column, onUpdate, onRemove, onAddColu
                         </label>
                     </div>
                 )}
-
-                {/* Edit locked toggle */}
-                <div className="tc-prop-group tc-checkbox-group">
-                    <label className="tc-checkbox-label">
-                        <input
-                            type="checkbox"
-                            checked={column.editLocked}
-                            onChange={(e) => onUpdate({ ...column, editLocked: e.target.checked })}
-                        />
-                        入力をロックする（マスタ参照のみ）
-                    </label>
-                    <small className="text-muted">ONにすると、発注時にこの列の手入力ができなくなります。</small>
-                </div>
 
                 {/* Select options */}
                 {column.type === 'select' && (

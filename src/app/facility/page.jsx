@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 const getRecentOrderTemplates = () => {
@@ -25,7 +25,22 @@ export default function FacilityDashboard() {
         { id: 'ORD-003', date: '2024/01/05', items: 8, status: '送信済' },
     ];
 
-    const [templates] = useState(() => getRecentOrderTemplates());
+    const [templates, setTemplates] = useState(() => getRecentOrderTemplates());
+
+    useEffect(() => {
+        const syncTemplates = () => {
+            setTemplates(getRecentOrderTemplates());
+        };
+
+        syncTemplates();
+        window.addEventListener('orderTemplatesUpdated', syncTemplates);
+        window.addEventListener('focus', syncTemplates);
+
+        return () => {
+            window.removeEventListener('orderTemplatesUpdated', syncTemplates);
+            window.removeEventListener('focus', syncTemplates);
+        };
+    }, []);
 
     return (
         <div>
@@ -37,20 +52,6 @@ export default function FacilityDashboard() {
                 gap: 'var(--spacing-lg)',
                 marginBottom: 'var(--spacing-xl)'
             }}>
-                {/* 新規発注カード */}
-                <div className="card" style={{
-                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                    border: 'none'
-                }}>
-                    <h3 style={{ marginBottom: 'var(--spacing-md)' }}>新規発注を作成</h3>
-                    <p style={{ marginBottom: 'var(--spacing-lg)', opacity: 0.9 }}>
-                        発注書形式のUIで簡単に発注できます
-                    </p>
-                    <Link href="/facility/order" className="btn btn-lg" style={{ background: 'white', color: 'var(--primary)' }}>
-                        📝 発注書を作成
-                    </Link>
-                </div>
-
                 {/* いつもの注文カード */}
                 <div className="card">
                     <h3 style={{ marginBottom: 'var(--spacing-md)' }}>⭐ いつもの注文</h3>
@@ -69,12 +70,26 @@ export default function FacilityDashboard() {
                                 borderBottom: index < templates.length - 1 ? '1px solid var(--border-color)' : 'none'
                             }}>
                                 <span>{template.name} ({template.items?.length || 0}品目)</span>
-                                <Link href={`/facility/order?template=${template.id}`} className="btn btn-sm btn-primary">発注</Link>
+                                <Link href={`/facility/order/confirm?template=${template.id}`} className="btn btn-sm btn-primary">発注</Link>
                             </div>
                         ))
                     )}
                     <Link href="/facility/templates" className="btn btn-secondary w-full" style={{ marginTop: 'var(--spacing-md)' }}>
                         すべて表示
+                    </Link>
+                </div>
+
+                {/* 新規発注カード */}
+                <div className="card" style={{
+                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                    border: 'none'
+                }}>
+                    <h3 style={{ marginBottom: 'var(--spacing-md)' }}>新規発注を作成</h3>
+                    <p style={{ marginBottom: 'var(--spacing-lg)', opacity: 0.9 }}>
+                        発注書形式のUIで簡単に発注できます
+                    </p>
+                    <Link href="/facility/order" className="btn btn-lg" style={{ background: 'white', color: 'var(--primary)' }}>
+                        📝 発注書を作成
                     </Link>
                 </div>
             </div>
