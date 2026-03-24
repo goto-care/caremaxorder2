@@ -1,22 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-
-const getRecentOrderTemplates = () => {
-    if (typeof window === 'undefined') return [];
-
-    try {
-        return JSON.parse(localStorage.getItem('orderTemplates') || '[]')
-            .sort((a, b) => {
-                const left = a?.savedAt ? new Date(a.savedAt).getTime() : 0;
-                const right = b?.savedAt ? new Date(b.savedAt).getTime() : 0;
-                return right - left;
-            })
-            .slice(0, 3);
-    } catch {
-        return [];
-    }
-};
+import {
+    loadFacilityOrderTemplates,
+    ORDER_TEMPLATES_UPDATED_EVENT,
+    readStoredFacilityOrderTemplates,
+} from '@/lib/facilityOrderTemplates';
 
 export default function FacilityDashboard() {
     const recentOrders = [
@@ -25,19 +14,25 @@ export default function FacilityDashboard() {
         { id: 'ORD-003', date: '2024/01/05', items: 8, status: '送信済' },
     ];
 
-    const [templates, setTemplates] = useState(() => getRecentOrderTemplates());
+    const [templates, setTemplates] = useState(() => readStoredFacilityOrderTemplates().slice(0, 3));
 
     useEffect(() => {
-        const syncTemplates = () => {
-            setTemplates(getRecentOrderTemplates());
+        let isActive = true;
+
+        const syncTemplates = async () => {
+            const nextTemplates = await loadFacilityOrderTemplates();
+            if (isActive) {
+                setTemplates(nextTemplates.slice(0, 3));
+            }
         };
 
         syncTemplates();
-        window.addEventListener('orderTemplatesUpdated', syncTemplates);
+        window.addEventListener(ORDER_TEMPLATES_UPDATED_EVENT, syncTemplates);
         window.addEventListener('focus', syncTemplates);
 
         return () => {
-            window.removeEventListener('orderTemplatesUpdated', syncTemplates);
+            isActive = false;
+            window.removeEventListener(ORDER_TEMPLATES_UPDATED_EVENT, syncTemplates);
             window.removeEventListener('focus', syncTemplates);
         };
     }, []);

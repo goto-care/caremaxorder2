@@ -1,48 +1,47 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-
-const getStoredOrderTemplates = () => {
-    if (typeof window === 'undefined') return [];
-
-    try {
-        return JSON.parse(localStorage.getItem('orderTemplates') || '[]');
-    } catch {
-        return [];
-    }
-};
-
-const sortTemplatesBySavedAt = (templates) => [...templates].sort((a, b) => {
-    const left = a?.savedAt ? new Date(a.savedAt).getTime() : 0;
-    const right = b?.savedAt ? new Date(b.savedAt).getTime() : 0;
-    return right - left;
-});
+import {
+    deleteFacilityOrderTemplate,
+    loadFacilityOrderTemplates,
+    ORDER_TEMPLATES_UPDATED_EVENT,
+    readStoredFacilityOrderTemplates,
+} from '@/lib/facilityOrderTemplates';
 
 export default function FacilityTemplatesPage() {
-    const [templates, setTemplates] = useState(() => sortTemplatesBySavedAt(getStoredOrderTemplates()));
+    const [templates, setTemplates] = useState(() => readStoredFacilityOrderTemplates());
 
     useEffect(() => {
-        const syncTemplates = () => {
-            setTemplates(sortTemplatesBySavedAt(getStoredOrderTemplates()));
+        let isActive = true;
+
+        const syncTemplates = async () => {
+            const nextTemplates = await loadFacilityOrderTemplates();
+            if (isActive) {
+                setTemplates(nextTemplates);
+            }
         };
 
         syncTemplates();
-        window.addEventListener('orderTemplatesUpdated', syncTemplates);
+        window.addEventListener(ORDER_TEMPLATES_UPDATED_EVENT, syncTemplates);
         window.addEventListener('focus', syncTemplates);
 
         return () => {
-            window.removeEventListener('orderTemplatesUpdated', syncTemplates);
+            isActive = false;
+            window.removeEventListener(ORDER_TEMPLATES_UPDATED_EVENT, syncTemplates);
             window.removeEventListener('focus', syncTemplates);
         };
     }, []);
 
-    const handleDelete = (id) => {
+    const handleDelete = async (id) => {
         if (!confirm('このいつもの注文を削除してもよろしいですか？')) return;
 
-        const updated = templates.filter(template => template.id !== id);
-        setTemplates(updated);
-        localStorage.setItem('orderTemplates', JSON.stringify(updated));
-        window.dispatchEvent(new Event('orderTemplatesUpdated'));
+        const result = await deleteFacilityOrderTemplate(id);
+        if (result.error) {
+            alert('テンプレートの削除に失敗しました。Firebase の接続を確認してください。');
+            return;
+        }
+
+        setTemplates(current => current.filter(template => template.id !== id));
     };
 
     return (

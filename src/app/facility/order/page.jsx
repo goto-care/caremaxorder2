@@ -7,6 +7,12 @@ import { v4 as uuidv4 } from 'uuid';
 import AutoFitTextField from '@/components/AutoFitTextField';
 import OrderConfirmPaper from '@/components/orderPreview/OrderConfirmPaper';
 import MultiRowProductTable from '@/components/productTable/MultiRowProductTable';
+import {
+    loadFacilityOrderTemplates,
+    readStoredFacilityOrderTemplates,
+    saveFacilityOrderTemplate,
+    sortOrderTemplatesBySavedAt,
+} from '@/lib/facilityOrderTemplates';
 import { getVisibleProductTableColumns, sanitizeProductTableConfig } from '@/lib/productTableConfig';
 
 const DEFAULT_TEXT_ALIGN = 'left';
@@ -28,9 +34,9 @@ const hasMeaningfulOrderItem = (item) => Boolean(item.janCode || item.productNam
 const serializeOrderItems = (items) => items.filter(hasMeaningfulOrderItem).map(item => ({ janCode: item.janCode, productName: item.productName, specification: item.specification, price: Number(item.price) || 0, quantity: parseInt(item.quantity, 10) || 0, remarks: item.remarks || '', customColumns: item.customColumns || {} }));
 const buildOrderItemsFromTemplate = (items = []) => items.map(item => ({ id: uuidv4(), janCode: item.janCode || '', productName: item.productName || '', specification: item.specification || '', price: Number(item.price) || 0, quantity: Number(item.quantity) || 0, remarks: item.remarks || '', customColumns: item.customColumns || {} }));
 const buildFieldAlignments = (fields = [], template = null) => fields.reduce((acc, field) => (isMultilineField(field) ? { ...acc, [field.id]: template?.customAlignments?.[field.id] || field.textAlign || DEFAULT_TEXT_ALIGN } : acc), {});
-const getStoredOrderTemplates = () => { if (typeof window === 'undefined') return []; try { return JSON.parse(localStorage.getItem('orderTemplates') || '[]'); } catch { return []; } };
-const saveStoredOrderTemplates = (templates) => { if (typeof window === 'undefined') return; localStorage.setItem('orderTemplates', JSON.stringify(templates)); window.dispatchEvent(new Event('orderTemplatesUpdated')); };
-const createOrderTemplate = (format, formValues, items, fieldAlignments, orderRemark, savedAt = new Date()) => ({ id: `TPL-${uuidv4()}`, name: `${format.name} (${savedAt.toLocaleDateString('ja-JP')} 発注)`, formatId: format.id, formatName: format.name, customValues: formValues, customAlignments: fieldAlignments, items: serializeOrderItems(items), orderRemark: orderRemark || '', savedAt: savedAt.toISOString() });
+const createOrderTemplate = (format, formValues, items, fieldAlignments, orderRemark, savedAt = new Date()) => ({ id: `TPL-${uuidv4()}`, name: `${format.name} (${savedAt.toLocaleDateString('ja-JP')} 発注)`, formatId: format.id, formatName: format.name, formatSnapshot: format, customValues: formValues, customAlignments: fieldAlignments, items: serializeOrderItems(items), orderRemark: orderRemark || '', savedAt: savedAt.toISOString() });
+const readStoredOrderFormats = () => { if (typeof window === 'undefined') return []; try { return JSON.parse(localStorage.getItem('orderFormats') || '[]'); } catch { return []; } };
+const mergeFormatsWithTemplateSnapshot = (formats = [], template = null) => (template?.formatSnapshot && !formats.some(item => item.id === template.formatSnapshot.id) ? [template.formatSnapshot, ...formats] : formats);
 const normalizeCsvHeader = (value) => String(value || '').replace(/^\uFEFF/, '').trim();
 const formatCsvDate = () => new Date().toISOString().slice(0, 10);
 
@@ -155,8 +161,10 @@ export default function OrderPage() {
     const isConfirmMode = pathname === '/facility/order/confirm';
     const csvInputRef = useRef(null);
     const [savedFormats, setSavedFormats] = useState([]);
+    const [storedTemplates, setStoredTemplates] = useState(() => readStoredFacilityOrderTemplates());
     const [selectedFormat, setSelectedFormat] = useState(null);
     const [activeTemplateId, setActiveTemplateId] = useState(null);
+    const [isInitializingFormats, setIsInitializingFormats] = useState(true);
     const [formValues, setFormValues] = useState({});
     const [fieldAlignments, setFieldAlignments] = useState({});
     const [orderItems, setOrderItems] = useState([createEmptyOrderItem()]);
@@ -182,19 +190,61 @@ export default function OrderPage() {
         setErrors([]);
     }
 
-    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
-        const formatsStr = localStorage.getItem('orderFormats');
-        if (!formatsStr) return;
-        const formats = JSON.parse(formatsStr);
-        setSavedFormats(formats);
-        if (!formats.length) return;
-        const templateId = new URLSearchParams(window.location.search).get('template');
-        const template = templateId ? getStoredOrderTemplates().find(item => item.id === templateId) : null;
-        const initialFormat = template ? formats.find(item => item.id === template.formatId) || formats[0] : formats[0];
-        applyFormat(initialFormat, template);
+        let isActive = true;
+
+        const initializePage = async () => {
+            const templateId = new URLSearchParams(window.location.search).get('template');
+            const localFormats = readStoredOrderFormats();
+            const localTemplates = readStoredFacilityOrderTemplates();
+            const localTemplate = templateId ? localTemplates.find(item => item.id === templateId) : null;
+            const initialFormats = mergeFormatsWithTemplateSnapshot(localFormats, localTemplate);
+
+            setStoredTemplates(localTemplates);
+            setSavedFormats(initialFormats);
+
+            if (initialFormats.length > 0) {
+                const initialFormat = localTemplate
+                    ? initialFormats.find(item => item.id === localTemplate.formatId) || localTemplate.formatSnapshot || initialFormats[0]
+                    : initialFormats[0];
+
+                applyFormat(initialFormat, localTemplate);
+            }
+
+            setIsInitializingFormats(false);
+
+            const templates = await loadFacilityOrderTemplates();
+
+            if (!isActive) {
+                return;
+            }
+
+            setStoredTemplates(templates);
+
+            const template = templateId ? templates.find(item => item.id === templateId) : null;
+            const nextFormats = mergeFormatsWithTemplateSnapshot(initialFormats, template);
+
+            setSavedFormats(nextFormats);
+
+            if (!nextFormats.length) {
+                return;
+            }
+
+            const initialFormat = template
+                ? nextFormats.find(item => item.id === template.formatId) || template.formatSnapshot || nextFormats[0]
+                : nextFormats[0];
+
+            if (template || !localTemplate) {
+                applyFormat(initialFormat, template);
+            }
+        };
+
+        initializePage();
+
+        return () => {
+            isActive = false;
+        };
     }, []);
-    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleFormatChange = (event) => { const format = savedFormats.find(item => item.id === event.target.value); if (format) applyFormat(format); };
     const handleFieldChange = (fieldId, value) => setFormValues(prev => ({ ...prev, [fieldId]: value }));
@@ -295,20 +345,61 @@ export default function OrderPage() {
         return { validationErrors, validItems };
     };
 
-    const persistEditedTemplate = () => {
-        if (!activeTemplateId || !selectedFormat) return;
-        const nextTemplates = getStoredOrderTemplates().map(template => template.id === activeTemplateId ? { ...template, formatId: selectedFormat.id, formatName: selectedFormat.name, customValues: formValues, customAlignments: fieldAlignments, items: serializeOrderItems(orderItems), orderRemark: orderRemark || '', savedAt: new Date().toISOString() } : template);
-        saveStoredOrderTemplates(nextTemplates);
+    const persistEditedTemplate = async () => {
+        if (!activeTemplateId || !selectedFormat) return { savedRemotely: false };
+
+        const currentTemplate = storedTemplates.find(template => template.id === activeTemplateId);
+        const nextTemplate = {
+            ...currentTemplate,
+            id: activeTemplateId,
+            formatId: selectedFormat.id,
+            formatName: selectedFormat.name,
+            formatSnapshot: selectedFormat,
+            customValues: formValues,
+            customAlignments: fieldAlignments,
+            items: serializeOrderItems(orderItems),
+            orderRemark: orderRemark || '',
+            savedAt: new Date().toISOString(),
+        };
+
+        const result = await saveFacilityOrderTemplate(nextTemplate);
+        setStoredTemplates(templates => sortOrderTemplatesBySavedAt([
+            result.template,
+            ...templates.filter(template => template.id !== result.template.id),
+        ]));
+        return result;
     };
 
-    const handleConfirmEditSave = () => { persistEditedTemplate(); setErrors([]); setIsConfirmEditing(false); };
+    const handleConfirmEditSave = async () => {
+        setIsSubmitting(true);
+        const result = await persistEditedTemplate();
+        setIsSubmitting(false);
+        setErrors([]);
+        setIsConfirmEditing(false);
 
-    const handleSubmit = () => {
+        if (result?.template) {
+            alert(result.savedRemotely ? '編集内容を保存しました。' : '編集内容をローカルに保存しました。Firebase への保存は失敗しました。');
+        }
+    };
+
+    const handleSubmit = async () => {
         const { validationErrors, validItems } = getValidationErrors();
         if (validationErrors.length) { setErrors(validationErrors); window.scrollTo(0, 0); return; }
         setErrors([]); setIsSubmitting(true);
         if (isConfirmMode) alert('発注書送付トリガーを実行しました。API 連携はこのボタンに接続予定です。');
-        else { saveStoredOrderTemplates([createOrderTemplate(selectedFormat, formValues, validItems, fieldAlignments, orderRemark), ...getStoredOrderTemplates()]); alert('「いつもの注文」に保存しました。'); applyFormat(selectedFormat); }
+        else {
+            const result = await saveFacilityOrderTemplate(
+                createOrderTemplate(selectedFormat, formValues, validItems, fieldAlignments, orderRemark),
+            );
+
+            setStoredTemplates(templates => sortOrderTemplatesBySavedAt([
+                result.template,
+                ...templates.filter(template => template.id !== result.template.id),
+            ]));
+
+            alert(result.savedRemotely ? '「いつもの注文」に保存しました。' : '「いつもの注文」をローカルに保存しました。Firebase への保存は失敗しました。');
+            applyFormat(selectedFormat);
+        }
         setIsSubmitting(false);
     };
 
@@ -317,6 +408,7 @@ export default function OrderPage() {
     const primaryClass = isConfirmMode && !isConfirmEditing ? 'btn btn-warning' : 'btn btn-primary';
     const primaryLoadingLabel = isConfirmMode && !isConfirmEditing ? '送付準備中...' : '保存中...';
 
+    if (isInitializingFormats) return <div className="card" style={{ padding: 'var(--spacing-xl)', textAlign: 'center' }}><p className="text-muted mb-md">発注フォーマットを読み込み中です。</p></div>;
     if (!selectedFormat) return <div className="card" style={{ padding: 'var(--spacing-xl)', textAlign: 'center' }}><p className="text-muted mb-md">利用できる発注フォーマットがありません。</p><p>「設定 &gt; 発注書設定」からフォーマットを作成してください。</p></div>;
 
     return (

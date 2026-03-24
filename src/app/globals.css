@@ -420,7 +420,9 @@ body {
 
 .mrpt-main-grid > .mrpt-cell.mrpt-cell-rowspan {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .mrpt-empty-slot {
